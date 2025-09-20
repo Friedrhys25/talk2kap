@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import './App.css'
-import Sidebar from './Components/Sidebar'
 import Loginpage from './Pages/Loginpage'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'
 import Mainpage from './Pages/Mainpage'

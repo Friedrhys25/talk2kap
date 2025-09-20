@@ -1,10 +1,10 @@
 import React from 'react'
-import Sidebar from '../Components/Sidebar'
 import { Example } from '../Components/Sidebarui'
+import PurokChart from '../Components/Pagecomponents/PurokChart'
 
 const Mainpage = () => {
   return (
-    <div className='flex min-h-screen bg-gray-100'>
+    <div className='flex min-h-screen bg-indigo-50'>
       <Example/>
     </div>
   )

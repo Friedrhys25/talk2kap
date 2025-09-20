@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import {
   FiBarChart,
+  FiArrowLeftCircle,
   FiChevronDown,
   FiChevronsRight,
   FiDollarSign,
@@ -13,19 +14,23 @@ import {
   FiUsers,
 } from "react-icons/fi";
 import { motion } from "framer-motion";
+import Dashpage from "../Pages/Sidebarpages/Dashpage";
+import Salepage from "../Pages/Sidebarpages/Salepage";
+import Viewpage from "../Pages/Sidebarpages/Viewpage";
 
 export const Example = () => {
+  const [selected, setSelected] = useState("Dashboard");
+
   return (
     <div className="flex bg-indigo-50">
-      <Sidebar />
-      <ExampleContent />
+      <Sidebar selected={selected} setSelected={setSelected} />
+      <ExampleContent selected={selected} />
     </div>
   );
 };
 
-const Sidebar = () => {  
+const Sidebar = ({ selected, setSelected }) => {  
   const [open, setOpen] = useState(true);
-  const [selected, setSelected] = useState("Dashboard");
 
   const navigate = useNavigate();
 
@@ -42,62 +47,16 @@ const Sidebar = () => {
         width: open ? "225px" : "fit-content",
       }}
     >
-      <TitleSection/>
+      <TitleSection open={open} user="rhys pogi"/>
 
       <div className="space-y-1">
-        <Option
-          
-          Icon={FiHome}
-          title="Dashboard"
-          selected={selected}
-          setSelected={setSelected}
-          open={open}
-        />
-        <Option
-          Icon={FiDollarSign}
-          title="Sales"
-          selected={selected}
-          setSelected={setSelected}
-          open={open}
-          /**backend for notifs */
-          notifs=""
-        />
-        <Option
-          Icon={FiMonitor}
-          title="View Site"
-          selected={selected}
-          setSelected={setSelected}
-          open={open}
-        />
-        <Option
-          Icon={FiShoppingCart}
-          title="Products"
-          selected={selected}
-          setSelected={setSelected}
-          open={open}
-        />
-        <Option
-          Icon={FiTag}
-          title="Tags"
-          selected={selected}
-          setSelected={setSelected}
-          open={open}
-        />
-        <Option
-          Icon={FiBarChart}
-          title="Analytics"
-          selected={selected}
-          setSelected={setSelected}
-          open={open}
-        />
-        <Option
-          Icon={FiUsers}
-          title="Logout"
-          selected={selected}
-          setSelected={setSelected}
-          onClick={handleLogout}
-          open={open}
-        />
+        <Option Icon={FiHome} title="Dashboard" selected={selected} setSelected={setSelected} open={open} />
+        <Option Icon={FiDollarSign} title="Sales" selected={selected} setSelected={setSelected} open={open} />
+        <Option Icon={FiMonitor} title="View Site" selected={selected} setSelected={setSelected} open={open} />
+        <Option Icon={FiShoppingCart} title="Products" selected={selected} setSelected={setSelected} open={open} />
+        <Option Icon={FiTag} title="Tags" selected={selected} setSelected={setSelected} open={open} />
+        <Option Icon={FiBarChart} title="Analytics" selected={selected} setSelected={setSelected} open={open} />
+        <Option Icon={FiArrowLeftCircle} title="Logout" selected={selected} setSelected={setSelected} onClick={handleLogout} open={open} />
       </div>
 
       <ToggleClose open={open} setOpen={setOpen} />
@@ -159,12 +118,29 @@ const Option = ({ Icon, title, selected, setSelected, open, notifs, onClick  }) 
   );
 };
 
-const TitleSection = () => {
+const TitleSection = ({open,user}) => {
   return (
-    <div className="flex justify-center mb-3 border-b border-slate-300 pb-3">
-          <h1 className="px-2 text-lg font-bold text-indigo-600">
-            User
-          </h1>
+    <div className="mb-3 border-b border-slate-300 pb-3">
+      <div className="flex cursor-pointer items-center justify-between rounded-md transition-colors hover:bg-slate-100">
+        <div className="flex items-center gap-2">
+          <motion.div
+            layout
+            className="grid h-full w-10 place-content-center text-lg"
+          >
+            <FiUsers />
+          </motion.div>
+          {open && (
+            <motion.div
+              layout
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.125 }}
+            >
+              <span className="text-md font-semibold">{user}</span>
+            </motion.div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
@@ -229,4 +205,15 @@ const ToggleClose = ({ open, setOpen }) => {
   );
 };
 
-const ExampleContent = () => <div className="h-[200vh] w-full"></div>;
+const ExampleContent = ({ selected }) => {
+  return (
+    <div className="h-[200vh] w-full p-4">
+      {selected === "Dashboard" && <Dashpage/>}
+      {selected === "Sales" && <Salepage/>}
+      {selected === "View Site" && <Viewpage/>}
+      {selected === "Products" && <h1 className="text-xl font-bold">Products Page</h1>}
+      {selected === "Tags" && <h1 className="text-xl font-bold">Tags Page</h1>}
+      {selected === "Analytics" && <h1 className="text-xl font-bold">Analytics Page</h1>}
+    </div>
+  );
+};
