@@ -4,7 +4,7 @@ import PurokChart from '../Components/Pagecomponents/PurokChart'
 
 const Mainpage = () => {
   return (
-    <div className='flex min-h-screen bg-indigo-50'>
+    <div className='flex min-h-screen w-full bg-indigo-50'>
       <Example/>
     </div>
   )

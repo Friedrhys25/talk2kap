@@ -3,12 +3,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 
 // Sample data for 6 puroks
 const purokData = [
-  { name: 'Purok 1', population: 245, households: 62, registered_voters: 180 },
-  { name: 'Purok 2', population: 312, households: 78, registered_voters: 230 },
-  { name: 'Purok 3', population: 189, households: 45, registered_voters: 142 },
-  { name: 'Purok 4', population: 278, households: 71, registered_voters: 205 },
-  { name: 'Purok 5', population: 356, households: 89, registered_voters: 267 },
-  { name: 'Purok 6', population: 198, households: 52, registered_voters: 151 }
+  { name: 'P1', population: 245, households: 62, registered_voters: 180 },
+  { name: 'P2', population: 312, households: 78, registered_voters: 230 },
+  { name: 'P3', population: 189, households: 45, registered_voters: 142 },
+  { name: 'P4', population: 278, households: 71, registered_voters: 205 },
+  { name: 'P5', population: 356, households: 89, registered_voters: 267 },
+  { name: 'P6', population: 198, households: 52, registered_voters: 151 }
 ];
 
 const pieData = purokData.map(item => ({

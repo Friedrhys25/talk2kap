@@ -4,18 +4,19 @@ import { useNavigate } from "react-router-dom";
 import {
   FiBarChart,
   FiArrowLeftCircle,
-  FiChevronDown,
   FiChevronsRight,
-  FiDollarSign,
+  FiBell,
   FiHome,
   FiMonitor,
   FiShoppingCart,
   FiTag,
   FiUsers,
+  FiX,           // Add this
+  FiAlertTriangle // Add this
 } from "react-icons/fi";
 import { motion } from "framer-motion";
 import Dashpage from "../Pages/Sidebarpages/Dashpage";
-import Salepage from "../Pages/Sidebarpages/Salepage";
+import Salepage from "../Pages/Sidebarpages/Notifpage";
 import Viewpage from "../Pages/Sidebarpages/Viewpage";
 
 export const Example = () => {
@@ -31,6 +32,7 @@ export const Example = () => {
 
 const Sidebar = ({ selected, setSelected }) => {  
   const [open, setOpen] = useState(true);
+  
 
   const navigate = useNavigate();
 
@@ -51,11 +53,10 @@ const Sidebar = ({ selected, setSelected }) => {
 
       <div className="space-y-1">
         <Option Icon={FiHome} title="Dashboard" selected={selected} setSelected={setSelected} open={open} />
-        <Option Icon={FiDollarSign} title="Sales" selected={selected} setSelected={setSelected} open={open} />
+        <Option Icon={FiBell } title="Notification" selected={selected} setSelected={setSelected} open={open} />
         <Option Icon={FiMonitor} title="View Site" selected={selected} setSelected={setSelected} open={open} />
         <Option Icon={FiShoppingCart} title="Products" selected={selected} setSelected={setSelected} open={open} />
         <Option Icon={FiTag} title="Tags" selected={selected} setSelected={setSelected} open={open} />
-        <Option Icon={FiBarChart} title="Analytics" selected={selected} setSelected={setSelected} open={open} />
         <Option Icon={FiArrowLeftCircle} title="Logout" selected={selected} setSelected={setSelected} onClick={handleLogout} open={open} />
       </div>
 
@@ -207,13 +208,37 @@ const ToggleClose = ({ open, setOpen }) => {
 
 const ExampleContent = ({ selected }) => {
   return (
-    <div className="h-[200vh] w-full p-4">
-      {selected === "Dashboard" && <Dashpage/>}
-      {selected === "Sales" && <Salepage/>}
-      {selected === "View Site" && <Viewpage/>}
-      {selected === "Products" && <h1 className="text-xl font-bold">Products Page</h1>}
-      {selected === "Tags" && <h1 className="text-xl font-bold">Tags Page</h1>}
-      {selected === "Analytics" && <h1 className="text-xl font-bold">Analytics Page</h1>}
+    <div className="flex flex-1 w-full h-screen overflow-y-auto bg-indigo-50">
+      {selected === "Dashboard" && (
+        <div className="w-full h-full min-w-0">
+          <Dashpage />
+        </div>
+      )}
+      {selected === "Sales" && (
+        <div className="w-full h-full min-w-0">
+          <Salepage/>
+        </div>
+      )}
+      {selected === "View Site" && (
+        <div className="w-full h-full min-w-0">
+          <Viewpage />
+        </div>
+      )}
+      {selected === "Products" && (
+        <div className="w-full h-full min-w-0 p-6 bg-white">
+          <h1 className="text-xl font-bold">Products Page</h1>
+        </div>
+      )}
+      {selected === "Tags" && (
+        <div className="w-full h-full min-w-0 p-6 bg-white">
+          <h1 className="text-xl font-bold">Tags Page</h1>
+        </div>
+      )}
+      {selected === "Analytics" && (
+        <div className="w-full h-full min-w-0 p-6 bg-white">
+          <PurokChart />
+        </div>
+      )}
     </div>
   );
 };

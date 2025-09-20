@@ -7,7 +7,7 @@ const HoverDevCards = () => {
 
       <p className="text-xl font-semibold mb-2">Dashboard</p>
 
-      <div className="grid gap-6 grid-cols-6 lg:grid-cols-3">
+      <div className="grid gap-6 grid-cols-6 lg:grid-cols-5 md:grid-cols-2 sm:grid-cols-1">
         <Card title="Purok 1" Icon={FiMail}/>
         <Card title="Purok 2" Icon={FiMail}/>
         <Card title="Purok 3" Icon={FiMail}/>
