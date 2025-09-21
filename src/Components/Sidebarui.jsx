@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import {
   FiBarChart,
@@ -11,8 +10,8 @@ import {
   FiShoppingCart,
   FiTag,
   FiUsers,
-  FiX,           // Add this
-  FiAlertTriangle // Add this
+  FiX,
+  FiAlertTriangle
 } from "react-icons/fi";
 import { motion } from "framer-motion";
 import Dashpage from "../Pages/Sidebarpages/Dashpage";
@@ -30,39 +29,120 @@ export const Example = () => {
   );
 };
 
+// Logout Modal Component
+const LogoutModal = ({ isOpen, onClose, onConfirm }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-opacity-10 backdrop-blur-sm"
+        onClick={onClose}
+      ></div>
+      
+      {/* Modal */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4"
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+        >
+          <FiX size={24} />
+        </button>
+
+        {/* Content */}
+        <div className="text-center">
+          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mb-4">
+            <FiAlertTriangle className="text-red-600" size={24} />
+          </div>
+          
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Confirm Logout
+          </h3>
+          
+          <p className="text-gray-500 mb-6">
+            Are you sure you want to logout? You will need to login again to access the dashboard.
+          </p>
+
+          {/* Buttons */}
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
+            >
+              Yes, Logout
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 const Sidebar = ({ selected, setSelected }) => {  
   const [open, setOpen] = useState(true);
-  
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const navigate = useNavigate();
+  // Note: Add your useNavigate hook here in your actual file
+  // const navigate = useNavigate();
 
-  const handleLogout = () => {
+  const handleLogoutClick = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = () => {
     localStorage.removeItem("isLoggedIn");
-    navigate("/");
+    setShowLogoutModal(false);
+    // Add your navigation logic here: navigate("/");
+    console.log("User logged out - redirect to login page");
+  };
+
+  const cancelLogout = () => {
+    setShowLogoutModal(false);
   };
 
   return (
-    <motion.nav
-      layout
-      className="sticky top-0 h-screen shrink-0 border-r border-slate-300 bg-white p-2"
-      style={{
-        width: open ? "225px" : "fit-content",
-      }}
-    >
-      <TitleSection open={open} user="rhys pogi"/>
+    <>
+      <motion.nav
+        layout
+        className="sticky top-0 h-screen shrink-0 border-r border-slate-300 bg-white p-2"
+        style={{
+          width: open ? "225px" : "fit-content",
+        }}
+      >
+        <TitleSection open={open} user="rhys pogi"/>
 
-      <div className="space-y-1">
-        <Option Icon={FiHome} title="Dashboard" selected={selected} setSelected={setSelected} open={open} />
-        <Option Icon={FiBell } title="Notification" selected={selected} setSelected={setSelected} open={open} />
-        <Option Icon={FiMonitor} title="View Site" selected={selected} setSelected={setSelected} open={open} />
-        <Option Icon={FiShoppingCart} title="Products" selected={selected} setSelected={setSelected} open={open} />
-        <Option Icon={FiTag} title="Tags" selected={selected} setSelected={setSelected} open={open} />
-        <Option Icon={FiArrowLeftCircle} title="Logout" selected={selected} setSelected={setSelected} onClick={handleLogout} open={open} />
-      </div>
+        <div className="space-y-1">
+          <Option Icon={FiHome} title="Dashboard" selected={selected} setSelected={setSelected} open={open} />
+          <Option Icon={FiBell } title="Notification" selected={selected} setSelected={setSelected} open={open} />
+          <Option Icon={FiMonitor} title="View Site" selected={selected} setSelected={setSelected} open={open} />
+          <Option Icon={FiShoppingCart} title="Products" selected={selected} setSelected={setSelected} open={open} />
+          <Option Icon={FiTag} title="Tags" selected={selected} setSelected={setSelected} open={open} />
+          <Option Icon={FiArrowLeftCircle} title="Logout" selected={selected} setSelected={setSelected} onClick={handleLogoutClick} open={open} />
+        </div>
 
-      <ToggleClose open={open} setOpen={setOpen} />
+        <ToggleClose open={open} setOpen={setOpen} />
+      </motion.nav>
 
-    </motion.nav>
+      {/* Logout Modal */}
+      <LogoutModal 
+        isOpen={showLogoutModal}
+        onClose={cancelLogout}
+        onConfirm={confirmLogout}
+      />
+    </>
   );
 };
 
@@ -72,7 +152,7 @@ const Option = ({ Icon, title, selected, setSelected, open, notifs, onClick  }) 
       layout
       onClick={() => {
         if (onClick) {
-          onClick();   // ✅ run custom handler (like handleLogout)
+          onClick();   // ✅ run custom handler (like handleLogoutClick)
         } else {
           setSelected(title); // ✅ fallback for normal menu items
         }
@@ -146,34 +226,6 @@ const TitleSection = ({open,user}) => {
   );
 };
 
-const Logo = () => {
-  // Temp logo from https://logoipsum.com/
-  return (
-    <motion.div
-      layout
-      className="grid size-10 shrink-0 place-content-center rounded-md bg-indigo-600"
-    >
-      <svg
-        width="24"
-        height="auto"
-        viewBox="0 0 50 39"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="fill-slate-50"
-      >
-        <path
-          d="M16.4992 2H37.5808L22.0816 24.9729H1L16.4992 2Z"
-          stopColor="#000000"
-        ></path>
-        <path
-          d="M17.4224 27.102L11.4192 36H33.5008L49 13.0271H32.7024L23.2064 27.102H17.4224Z"
-          stopColor="#000000"
-        ></path>
-      </svg>
-    </motion.div>
-  );
-};
-
 const ToggleClose = ({ open, setOpen }) => {
   return (
     <motion.button
@@ -214,7 +266,7 @@ const ExampleContent = ({ selected }) => {
           <Dashpage />
         </div>
       )}
-      {selected === "Sales" && (
+      {selected === "Notification" && (
         <div className="w-full h-full min-w-0">
           <Salepage/>
         </div>
@@ -232,11 +284,6 @@ const ExampleContent = ({ selected }) => {
       {selected === "Tags" && (
         <div className="w-full h-full min-w-0 p-6 bg-white">
           <h1 className="text-xl font-bold">Tags Page</h1>
-        </div>
-      )}
-      {selected === "Analytics" && (
-        <div className="w-full h-full min-w-0 p-6 bg-white">
-          <PurokChart />
         </div>
       )}
     </div>
