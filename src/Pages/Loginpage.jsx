@@ -1,11 +1,11 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";  // ✅ import navigate
+import { useNavigate } from "react-router-dom";
 
 const Loginpage = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
-  const navigate = useNavigate(); // ✅ initialize
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -22,8 +22,7 @@ const Loginpage = () => {
       if (data.success) {
         localStorage.setItem("isLoggedIn", "true");
         navigate("/main");
-        }
-      else {
+      } else {
         setMessage(data.message);
       }
     } catch (err) {
@@ -32,50 +31,62 @@ const Loginpage = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-10 rounded-2xl shadow-md w-900 max-w-sm"
-      >
-        <h2 className="text-3xl font-bold mb-6 text-center">Login</h2>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-400 to-indigo-600">
+      <div className="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-md">
+        {/* Logo / Title */}
+        <h1 className="text-4xl font-extrabold text-center text-indigo-700 mb-6">
+          Talk2Kap
+        </h1>
+        <p className="text-center text-gray-500 mb-6">
+          Feedback & Complaint Management System
+        </p>
 
-        <div className="mb-4">
-          <label htmlFor="username" className="block text-gray-700 mb-2">
-            Username
-          </label>
-          <input
-            className="w-full px-3 py-2 border rounded"
-            id="username"
-            type="text"
-            placeholder="Enter your username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
+        {/* Login Form */}
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label htmlFor="username" className="block text-gray-700 mb-2">
+              Username
+            </label>
+            <input
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              id="username"
+              type="text"
+              placeholder="Enter your username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" className="block text-gray-700 mb-2">
+              Password
+            </label>
+            <input
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              id="password"
+              type="password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+
+          <button
+            className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition duration-200"
+            type="submit"
+          >
+            Login
+          </button>
+
+          {message && (
+            <p className="text-center text-sm text-red-500 mt-2">{message}</p>
+          )}
+        </form>
+
+        {/* Extra Links */}
+        <div className="mt-6 text-center">
         </div>
-
-        <div className="mb-3">
-          <label htmlFor="password" className="block text-gray-700 mb-2">
-            Password
-          </label>
-          <input
-            className="w-full px-3 py-2 border rounded"
-            id="password"
-            type="password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-
-        <button
-          className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition duration-200"
-          type="submit"
-        >
-          Login
-        </button>
-
-        {message && <p className="mt-4 text-center text-sm text-red-500">{message}</p>}
-      </form>
+      </div>
     </div>
   );
 };
