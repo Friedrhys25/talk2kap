@@ -1,16 +1,24 @@
-import React from 'react'
+// Officialpage.jsx
+import React from "react";
+import OfficialTable from "../../Components/Pagecomponents/Officialtable";
 
 const Officialpage = () => {
   return (
-    <div className=' bg-gray-50 w-full min-h-screen flex flex-col items-center justify-center'>
-      <h1 className='text-8xl font-bold text-gray-800'>
-        Barangay officials
-      </h1>
-      <p className='mt-4 text-2xl text-gray-600'>
-        Feedbacks, ratings and complaints about specific officials
-      </p>
-    </div>
-  )
-}
+    <div className="p-6 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">
+          Barangay Officials
+        </h1>
+        <p className="text-gray-600">
+          Feedbacks, ratings, and complaints about specific officials
+        </p>
+      </div>
 
-export default Officialpage
+      {/* Officials Table Component */}
+      <OfficialTable />
+    </div>
+  );
+};
+
+export default Officialpage;
