@@ -365,7 +365,7 @@ const MessageTable = () => {
 
       {/* Modal for Conversation */}
       {selectedConversation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0  bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl h-[90vh] flex flex-col">
             <div className="p-6 border-b flex-shrink-0">
               <button

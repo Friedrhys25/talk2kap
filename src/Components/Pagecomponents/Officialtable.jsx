@@ -92,7 +92,7 @@ const OfficialTable = () => {
   };
 
   return (
-    <div className="space-y-6 h-screen p-6 bg-gray-50 ">
+    <div className="space-y-6 h-full p-6 bg-gray-50 ">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[

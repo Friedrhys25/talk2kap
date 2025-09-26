@@ -20,8 +20,8 @@ const HoverDevCards = ({ onPurokSelect, selectedPurok, onBackToDashboard }) => {
 
   // Show dashboard cards
   return (
-    <div className="p-4">
-      <p className="text-2xl font-semibold mb-5">Dashboard</p>
+    <div className="p-4 flex items-center justify-center flex-col">
+      <p className="text-5xl font-semibold mb-8 block">Dashboard</p>
 
       <div className="grid gap-6 grid-cols-6 lg:grid-cols-5 md:grid-cols-2 sm:grid-cols-1">
         <Card 
