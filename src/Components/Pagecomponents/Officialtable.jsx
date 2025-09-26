@@ -92,7 +92,7 @@ const OfficialTable = () => {
   };
 
   return (
-    <div className="space-y-6 h-screen p-6 bg-gray-50 overflow-y-auto">
+    <div className="space-y-6 h-screen p-6 bg-gray-50 ">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
@@ -145,7 +145,7 @@ const OfficialTable = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg shadow-sm border overflow-x-auto">
+      <div className="bg-white rounded-lg shadow-sm border ">
         <table className="w-full min-w-[700px]">
           <thead className="bg-gray-50 border-b">
             <tr>
