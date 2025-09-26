@@ -688,7 +688,7 @@ const ExampleContent = ({ selected }) => {
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="w-full h-full p-8 bg-white shadow-md rounded-lg justify-center items-center flex flex-col"
+            className="w-full h-full"
           >
             <Reportspage/>
           </motion.div>
@@ -700,7 +700,7 @@ const ExampleContent = ({ selected }) => {
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="w-full h-full p-8 bg-white shadow-md rounded-lg justify-center items-center flex flex-col"
+            className="w-full h-full"
           >
             <Officialpage />
           </motion.div>
