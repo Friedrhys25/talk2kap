@@ -277,7 +277,7 @@ const NotifTable = () => {
 
       {/* Notifications Table */}
       <div className="bg-white rounded-lg shadow-sm border">
-        <div className="max-h-[400px] overflow-y-auto">
+        <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b sticky top-0">
               <tr>
@@ -390,14 +390,16 @@ const NotifTable = () => {
             <p className="text-gray-400 mt-2">Try adjusting your search or filters</p>
           </div>
         )}
-      </div>
 
-      {/* Results Summary */}
-      {filteredNotifications.length > 0 && (
-        <div className="text-sm text-gray-600 text-center">
+        {filteredNotifications.length > 0 && (
+        <div className="text-md font-bold mb-5 mt-2 text-gray-600 text-center">
           Showing {filteredNotifications.length} of {notifications.length} notifications
         </div>
       )}
+      </div>
+
+      {/* Results Summary */}
+      
     </div>
   );
 };

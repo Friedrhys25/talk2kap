@@ -4,7 +4,7 @@ import NotifTable from '../../Components/Pagecomponents/Notiftable';
 
 const Salepage = () => {
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
+    <div className="flex flex-col w-full h-screen overflow-hidden bg-gray-50">
       <div className="p-6 flex-1 overflow-y-auto">
         {/* Header */}
         <div className="mb-6">

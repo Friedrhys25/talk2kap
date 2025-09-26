@@ -11,7 +11,7 @@ import {
 } from "react-icons/fi";
 
 const MessageTable = () => {
-  const [filter, setFilter] = useState("all"); // all, read, unread
+  const [filter, setFilter] = useState("all"); // Filter state: all, read, unread, unread
   const [searchTerm, setSearchTerm] = useState("");
   const [conversations, setConversations] = useState([
     {
@@ -177,48 +177,49 @@ const MessageTable = () => {
   };
 
   return (
-    <div className="space-y-6" style={{ maxHeight: '600px' }}>
+    <div className="space-y-4">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-shrink-0">
-        <div className="bg-white rounded-lg p-4 shadow-sm border">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg p-4 shadow-sm border hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Conversations</p>
+              <p className="text-sm font-medium text-gray-600">Total Conversations</p>
               <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
             </div>
-            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-              <FiInbox className="text-indigo-600" />
+            <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
+              <FiInbox className="w-6 h-6 text-indigo-600" />
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg p-4 shadow-sm border">
+        <div className="bg-white rounded-lg p-4 shadow-sm border hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Unread</p>
+              <p className="text-sm font-medium text-gray-600">Unread</p>
               <p className="text-2xl font-bold text-yellow-600">{stats.unread}</p>
             </div>
-            <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-              <FiMail className="text-yellow-600" />
+            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+              <FiMail className="w-6 h-6 text-yellow-600" />
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg p-4 shadow-sm border">
+        <div className="bg-white rounded-lg p-4 shadow-sm border hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Read</p>
+              <p className="text-sm font-medium text-gray-600">Read</p>
               <p className="text-2xl font-bold text-green-600">{stats.read}</p>
             </div>
-            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-              <FiCheck className="text-green-600" />
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+              <FiCheck className="w-6 h-6 text-green-600" />
             </div>
           </div>
         </div>
       </div>
 
       {/* Filters + Search */}
-      <div className="bg-white rounded-lg shadow-sm border p-4 flex-shrink-0">
+      <div className="bg-white rounded-lg shadow-sm border p-4">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="relative flex-1 max-w-md">
+          {/* Search */}
+          <div className="relative flex-1 max-w-md w-full">
             <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -266,7 +267,7 @@ const MessageTable = () => {
 
       {/* Conversations Table - Scrollable */}
       <div className="bg-white rounded-lg shadow-sm border">
-        <div className="max-h-[400px] overflow-y-auto pb-4">
+        <div className=" pb-4">
           <table className="w-full">
             <thead className="bg-indigo-50 sticky top-0">
               <tr>
@@ -357,7 +358,7 @@ const MessageTable = () => {
 
       {/* Results Summary */}
       {filteredConversations.length > 0 && (
-        <div className="text-sm text-gray-600 text-center flex-shrink-0">
+        <div className="text-md font-bold text-gray-600 text-center flex-shrink-0 mb-5">
           Showing {filteredConversations.length} of {conversations.length} conversations
         </div>
       )}
