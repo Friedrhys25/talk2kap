@@ -177,7 +177,7 @@ const MessageTable = () => {
   };
 
   return (
-    <div className="space-y-6 max-h-screen overflow-y-auto">
+    <div className="space-y-6" style={{ maxHeight: '600px' }}>
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-shrink-0">
         <div className="bg-white rounded-lg p-4 shadow-sm border">
@@ -265,10 +265,10 @@ const MessageTable = () => {
       </div>
 
       {/* Conversations Table - Scrollable */}
-      <div className="bg-white rounded-lg shadow-sm border flex-1 min-h-0">
-        <div className="h-96 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-sm border">
+        <div className="max-h-[400px] overflow-y-auto pb-4">
           <table className="w-full">
-            <thead className="bg-indigo-50 border-b sticky top-0 z-10">
+            <thead className="bg-indigo-50 sticky top-0">
               <tr>
                 {["Participant", "Last Message", "Status", "Actions"].map(
                   (head) => (
@@ -342,6 +342,7 @@ const MessageTable = () => {
               })}
             </tbody>
           </table>
+          <div className="h-1"></div> {/* Bottom spacing */}
         </div>
 
         {filteredConversations.length === 0 && (
@@ -379,7 +380,7 @@ const MessageTable = () => {
             </div>
 
             {/* Chat history - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+            <div className="flex-1 p-6 space-y-3">
               {selectedConversation.messages.map((m, i) => (
                 <div
                   key={i}

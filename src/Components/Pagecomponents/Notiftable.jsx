@@ -175,13 +175,13 @@ const NotifTable = () => {
   };
 
   return (
-    <div className="space-y-6" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+    <div className="space-y-4">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg p-4 shadow-sm border">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-5 bg-gray-50">
+        <div className="bg-white rounded-lg p-4 shadow-sm border hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Notifications</p>
+              <p className="text-sm font-medium text-gray-600">Total Notifications</p>
               <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
             </div>
             <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -276,10 +276,10 @@ const NotifTable = () => {
       </div>
 
       {/* Notifications Table */}
-      <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-lg shadow-sm border">
+        <div className="max-h-[400px] overflow-y-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-gray-50 border-b sticky top-0">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Urgency
