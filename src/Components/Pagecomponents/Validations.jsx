@@ -158,7 +158,7 @@ const Validations = () => {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50">
+    <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -319,7 +319,7 @@ const Validations = () => {
               onClick={(e) => e.stopPropagation()}>
 
               {/* Modal header */}
-              <div className="relative p-6 text-white bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-700">
+              <div className="relative p-6 text-white bg-linear-to-r from-indigo-600 via-blue-600 to-indigo-700">
                 <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-3xl" />
                 <button className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full p-2 transition-all"
                   onClick={() => setSelectedUser(null)}><FiX size={22} /></button>
@@ -394,7 +394,7 @@ const Validations = () => {
 
         {/* Fullscreen image preview */}
         {previewImage && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-[9999]"
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-9999"
             onClick={() => setPreviewImage(null)}>
             <img src={previewImage} alt="Preview" className="max-w-[90%] max-h-[90%] rounded-lg shadow-2xl" />
             <button className="absolute top-6 right-6 text-white text-3xl font-bold hover:scale-110 transition-transform"

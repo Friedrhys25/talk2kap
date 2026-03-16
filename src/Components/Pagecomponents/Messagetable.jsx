@@ -229,7 +229,7 @@ const MessageTable = () => {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50">
+    <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       {/* Background watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -386,7 +386,7 @@ const MessageTable = () => {
                             {c.lastMessage}
                           </span>
                           {c.status === "unread" && (
-                            <FiBell className="text-red-500 animate-pulse flex-shrink-0" size={16} />
+                            <FiBell className="text-red-500 animate-pulse shrink-0" size={16} />
                           )}
                         </div>
                       </td>
@@ -429,7 +429,7 @@ const MessageTable = () => {
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="relative p-6 text-white bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-700 flex-shrink-0">
+              <div className="relative p-6 text-white bg-linear-to-r from-indigo-600 via-blue-600 to-indigo-700 shrink-0">
                 <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-3xl" />
                 <button
                   className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full p-2 transition-all"
@@ -450,7 +450,7 @@ const MessageTable = () => {
               </div>
 
               {/* Details */}
-              <div className="p-5 bg-slate-50 border-b flex-shrink-0">
+              <div className="p-5 bg-slate-50 border-b shrink-0">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <InfoPill
                     icon={<FiMapPin className="text-emerald-600" />}
@@ -531,7 +531,7 @@ const MessageTable = () => {
               </div>
 
               {/* Reply */}
-              <div className="p-5 border-t bg-white flex-shrink-0">
+              <div className="p-5 border-t bg-white shrink-0">
                 <div className="flex gap-2">
                   <textarea
                     rows={3}

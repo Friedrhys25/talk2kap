@@ -122,7 +122,7 @@ export const Example = () => {
   }, []);
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50">
+    <div className="relative w-full h-screen overflow-hidden bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       {/* Watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -155,7 +155,7 @@ export const Example = () => {
 const LogoutModal = ({ isOpen, onClose, onConfirm }) => (
   <AnimatePresence>
     {isOpen && (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-9999 flex items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
@@ -166,7 +166,7 @@ const LogoutModal = ({ isOpen, onClose, onConfirm }) => (
           variants={modalVariants} initial="hidden" animate="visible" exit="exit"
           className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/60 bg-white/80 backdrop-blur-xl shadow-2xl"
         >
-          <div className="relative p-6 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white">
+          <div className="relative p-6 bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white">
             <button onClick={onClose}
               className="absolute top-4 right-4 text-white/80 hover:text-white hover:bg-white/10 rounded-full p-2 transition">
               <FiX size={20} />
@@ -232,7 +232,7 @@ const Sidebar = ({ selected, setSelected, pendingComplaintsCount, pendingValidat
         {/* Brand */}
         <div className="p-3">
           <motion.div whileHover={{ scale: 1.01 }}
-            className="relative overflow-hidden rounded-2xl border border-white/60 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white shadow-lg">
+            className="relative overflow-hidden rounded-2xl border border-white/60 bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white shadow-lg">
             <div className="absolute -top-14 -right-14 w-48 h-48 rounded-full bg-white/15 blur-2xl" />
             <div className="relative px-4 py-4">
               <div className="flex items-center gap-3">
@@ -345,7 +345,7 @@ const Option = ({ Icon, title, selected, setSelected, open, notifs, onClick, dan
           >
             <span className="relative grid place-items-center">
               <FiBell className="text-rose-600 animate-pulse" size={14} />
-              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-rose-600 border-2 border-white text-[9px] leading-none text-white grid place-items-center font-extrabold">
+              <span className="absolute -top-1 -right-1 min-w-3.5 h-3.5 px-1 rounded-full bg-rose-600 border-2 border-white text-[9px] leading-none text-white grid place-items-center font-extrabold">
                 {notifs > 9 ? "9+" : notifs}
               </span>
             </span>

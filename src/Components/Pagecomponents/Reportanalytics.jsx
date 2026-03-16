@@ -79,7 +79,7 @@ const StatCard = ({ title, value, sub, icon, tone = "indigo", pill }) => {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-white/60 bg-white/85 backdrop-blur shadow-xl">
       <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-indigo-500/10 blur-3xl" />
-      <div className={`relative p-6 bg-gradient-to-b ${t.bg}`}>
+      <div className={`relative p-6 bg-linear-to-b ${t.bg}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -322,7 +322,7 @@ const ReportAnalytics = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-14 w-14 border-b-2 border-indigo-600 mx-auto mb-4" />
           <p className="text-gray-700 font-semibold text-sm">Loading analytics data...</p>
@@ -333,7 +333,7 @@ const ReportAnalytics = () => {
   }
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50">
+    <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -453,7 +453,7 @@ const ReportAnalytics = () => {
             </span>
           }
         >
-          <div className="h-[420px] w-full rounded-2xl bg-gradient-to-b from-slate-50 to-white p-4 border border-gray-200">
+          <div className="h-[420px] w-full rounded-2xl bg-linear-to-b from-slate-50 to-white p-4 border border-gray-200">
             <ResponsiveContainer>
               <ComposedChart data={graphData} margin={{ top: 18, right: 20, left: 0, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
@@ -473,7 +473,7 @@ const ReportAnalytics = () => {
         {/* Distribution Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Panel icon={<PieChart size={18} />} title="Figure 2: Complaint Priority Distribution" subtitle="Urgent vs non-urgent share">
-            <div className="h-72 rounded-2xl border border-gray-200 bg-gradient-to-b from-slate-50 to-white p-4">
+            <div className="h-72 rounded-2xl border border-gray-200 bg-linear-to-b from-slate-50 to-white p-4">
               <ResponsiveContainer>
                 <RPieChart>
                   <Pie
@@ -496,7 +496,7 @@ const ReportAnalytics = () => {
           </Panel>
 
           <Panel icon={<BarChart3 size={18} />} title="Figure 3: Complaint Category Distribution" subtitle="Top complaint types by count">
-            <div className="h-72 rounded-2xl border border-gray-200 bg-gradient-to-b from-slate-50 to-white p-4">
+            <div className="h-72 rounded-2xl border border-gray-200 bg-linear-to-b from-slate-50 to-white p-4">
               <ResponsiveContainer>
                 <BarChart data={categoryData} layout="vertical" margin={{ top: 8, right: 10, left: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" />

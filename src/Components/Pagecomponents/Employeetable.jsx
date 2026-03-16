@@ -174,7 +174,7 @@ export default function EmployeeTable() {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50">
+    <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       {/* Watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -592,7 +592,7 @@ function FeedbackModal({ employee, onClose }) {
         onClick={(ev) => ev.stopPropagation()}
       >
         {/* Header */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 p-6 md:p-7">
+        <div className="relative overflow-hidden bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 p-6 md:p-7">
           <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
           <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
 
@@ -657,7 +657,7 @@ function FeedbackModal({ employee, onClose }) {
         </div>
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-220px)] bg-gradient-to-b from-white to-slate-50">
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-220px)] bg-linear-to-b from-white to-slate-50">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
               <FiMessageCircle className="text-indigo-600" />

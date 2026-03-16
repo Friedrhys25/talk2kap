@@ -96,7 +96,7 @@ const HoverDevCards = ({ onPurokSelect, selectedPurok, onBackToDashboard }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen p-6 flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen p-6 flex items-center justify-center bg-linear-to-br from-slate-50 via-blue-50 to-indigo-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto mb-4" />
           <p className="text-gray-600 font-medium">Loading dashboard data...</p>
@@ -116,7 +116,7 @@ const HoverDevCards = ({ onPurokSelect, selectedPurok, onBackToDashboard }) => {
   }
 
   return (
-    <div className="min-h-screen p-6 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 relative">
+    <div className="min-h-screen p-6 bg-linear-to-br from-slate-50 via-blue-50 to-indigo-50 relative">
       {/* Watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -135,12 +135,12 @@ const HoverDevCards = ({ onPurokSelect, selectedPurok, onBackToDashboard }) => {
         {/* Header */}
         <div className="text-center space-y-3 pt-2">
           <div className="flex items-center justify-center gap-4 mb-2">
-            <div className="h-1 w-16 bg-gradient-to-r from-transparent to-indigo-500 rounded-full" />
+            <div className="h-1 w-16 bg-linear-to-r from-transparent to-indigo-500 rounded-full" />
             <FiGrid className="text-indigo-600 text-4xl animate-pulse" />
-            <div className="h-1 w-16 bg-gradient-to-l from-transparent to-indigo-500 rounded-full" />
+            <div className="h-1 w-16 bg-linear-to-l from-transparent to-indigo-500 rounded-full" />
           </div>
 
-          <h1 className="text-5xl md:text-6xl font-extrabold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+          <h1 className="text-5xl md:text-6xl font-extrabold bg-linear-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
             Dashboard
           </h1>
 
@@ -205,7 +205,7 @@ const PurokCard = ({ purokNo, urgent, nonUrgent, onClick }) => {
       className="group relative w-full rounded-2xl border-2 border-gray-200 bg-white overflow-hidden
                  shadow-md hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-300"
     >
-      <div className="h-1.5 w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600" />
+      <div className="h-1.5 w-full bg-linear-to-r from-indigo-600 via-purple-600 to-pink-600" />
       <div className="absolute -top-16 -right-16 w-52 h-52 rounded-full bg-indigo-100/70 blur-2xl group-hover:bg-purple-100/80 transition-colors" />
       <div className="absolute -bottom-16 -left-16 w-52 h-52 rounded-full bg-pink-100/60 blur-2xl group-hover:bg-indigo-100/70 transition-colors" />
 
@@ -232,7 +232,7 @@ const PurokCard = ({ purokNo, urgent, nonUrgent, onClick }) => {
           </div>
           <div className="mt-2 h-2.5 w-full rounded-full bg-gray-100 border border-gray-200 overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-red-500 to-orange-500 transition-all duration-500"
+              className="h-full rounded-full bg-linear-to-r from-red-500 to-orange-500 transition-all duration-500"
               style={{ width: `${urgentPct}%` }}
             />
           </div>
@@ -310,7 +310,7 @@ const PurokInfo = ({ purokNumber, onBack, purokStats }) => {
   ];
 
   return (
-    <div className="relative min-h-screen p-6 bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+    <div className="relative min-h-screen p-6 bg-linear-to-br from-gray-50 via-blue-50 to-indigo-50">
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -361,7 +361,7 @@ const PurokInfo = ({ purokNumber, onBack, purokStats }) => {
           </div>
 
           <div className="p-6">
-            <div className="h-80 rounded-xl border border-gray-200 bg-gradient-to-b from-gray-50 to-white p-4">
+            <div className="h-80 rounded-xl border border-gray-200 bg-linear-to-b from-gray-50 to-white p-4">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={complaintChartData} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" />

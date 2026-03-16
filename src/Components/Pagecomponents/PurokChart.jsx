@@ -105,7 +105,7 @@ const PurokChart = () => {
   );
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50">
+    <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       {/* Watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -129,13 +129,13 @@ const PurokChart = () => {
           <div className="relative p-7 md:p-9">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="inline-flex items-center gap-3">
-                <span className="h-[3px] w-12 md:w-16 bg-gradient-to-r from-transparent to-indigo-500 rounded-full" />
+                <span className="h-[3px] w-12 md:w-16 bg-linear-to-r from-transparent to-indigo-500 rounded-full" />
                 <div className="inline-flex items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-3xl bg-white shadow-lg border border-gray-200">
                   <Users className="text-indigo-600" size={24} />
                 </div>
-                <span className="h-[3px] w-12 md:w-16 bg-gradient-to-l from-transparent to-indigo-500 rounded-full" />
+                <span className="h-[3px] w-12 md:w-16 bg-linear-to-l from-transparent to-indigo-500 rounded-full" />
               </div>
-              <h1 className="text-3xl md:text-5xl lg:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+              <h1 className="text-3xl md:text-5xl lg:text-6xl font-extrabold tracking-tight bg-linear-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
                 Purok Overview Dashboard
               </h1>
               <p className="text-gray-700 text-base md:text-lg font-semibold max-w-3xl">
@@ -190,7 +190,7 @@ const PurokChart = () => {
             icon={<BarChart3 className="text-indigo-600" size={22} />}
             badge="Overview"
           >
-            <div className="rounded-2xl border border-gray-200 bg-gradient-to-b from-slate-50 to-white p-4">
+            <div className="rounded-2xl border border-gray-200 bg-linear-to-b from-slate-50 to-white p-4">
               <div className="h-[340px]">
                 <ResponsiveContainer>
                   <BarChart data={purokData} margin={{ top: 18, right: 24, left: 6, bottom: 12 }}>
@@ -217,7 +217,7 @@ const PurokChart = () => {
             icon={<BarChart3 className="text-indigo-600" size={22} />}
             badge="Distribution"
           >
-            <div className="rounded-2xl border border-gray-200 bg-gradient-to-b from-slate-50 to-white p-4">
+            <div className="rounded-2xl border border-gray-200 bg-linear-to-b from-slate-50 to-white p-4">
               <div className="h-[340px]">
                 <ResponsiveContainer>
                   <PieChart>
@@ -271,7 +271,7 @@ const PurokChart = () => {
             </div>
           ) : (
             <>
-              <div className="rounded-2xl border border-gray-200 bg-gradient-to-b from-slate-50 to-white p-4">
+              <div className="rounded-2xl border border-gray-200 bg-linear-to-b from-slate-50 to-white p-4">
                 <div className="h-[340px]">
                   <ResponsiveContainer>
                     <BarChart
@@ -401,7 +401,7 @@ const PurokChart = () => {
                 })}
 
                 {/* Totals row */}
-                <tr className="bg-gradient-to-r from-indigo-100 via-purple-100 to-pink-100 border-t-2 border-gray-200">
+                <tr className="bg-linear-to-r from-indigo-100 via-purple-100 to-pink-100 border-t-2 border-gray-200">
                   <td className="px-6 py-4 text-base md:text-lg font-extrabold text-gray-900">Total</td>
                   <Td center><span className="text-lg md:text-xl font-extrabold text-gray-900">{totals.population}</span></Td>
                   <Td center><span className="text-lg md:text-xl font-extrabold text-gray-900">{totals.households}</span></Td>
@@ -429,7 +429,7 @@ export default PurokChart;
 ======================= */
 
 const Panel = ({ title, icon, badge, children }) => (
-  <div className="bg-white/85 backdrop-blur rounded-[24px] shadow-2xl border border-white/60 overflow-hidden">
+  <div className="bg-white/85 backdrop-blur rounded-3xl shadow-2xl border border-white/60 overflow-hidden">
     <div className="px-6 py-5 md:px-7 md:py-5 border-b border-gray-200 flex items-center justify-between gap-3">
       <h3 className="text-lg md:text-xl font-extrabold text-gray-900 flex items-center gap-3">
         {icon}
@@ -455,10 +455,10 @@ const KpiCard = ({ title, value, icon, subtitle, tone = "indigo" }) => {
   const t = tones[tone] || tones.indigo;
 
   return (
-    <div className="relative overflow-hidden rounded-[24px] bg-white shadow-2xl border border-gray-200">
+    <div className="relative overflow-hidden rounded-3xl bg-white shadow-2xl border border-gray-200">
       <div className={`absolute -top-16 -right-16 w-64 h-64 rounded-full blur-3xl ${t.glow}`} />
       <div className={`absolute -bottom-20 -left-20 w-72 h-72 rounded-full blur-3xl ${t.glow}`} />
-      <div className={`relative p-6 bg-gradient-to-b ${t.bg}`}>
+      <div className={`relative p-6 bg-linear-to-b ${t.bg}`}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className={`text-xs md:text-sm font-extrabold uppercase tracking-wider ${t.accent}`}>{title}</p>

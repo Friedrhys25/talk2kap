@@ -92,7 +92,7 @@ const Talk2KapAuth = () => {
   );
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-6 bg-gradient-to-br from-indigo-700 to-pink-500">
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-6 bg-linear-to-br from-indigo-700 to-pink-500">
       {/* Background Logo */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -109,7 +109,7 @@ const Talk2KapAuth = () => {
       <div className="relative w-full max-w-md p-8 rounded-3xl bg-white shadow-2xl z-10">
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-indigo-600 to-pink-500 rounded-full mb-4">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-linear-to-br from-indigo-600 to-pink-500 rounded-full mb-4">
             <MessageCircle size={40} className="text-white" />
           </div>
           <h1 className="text-4xl font-extrabold text-gray-800">Talk2Kap</h1>
@@ -176,7 +176,7 @@ const Talk2KapAuth = () => {
           <button
             onClick={handleLogin}
             disabled={isLoading}
-            className="w-full py-3 rounded-2xl text-white font-semibold bg-gradient-to-r from-indigo-500 to-pink-500"
+            className="w-full py-3 rounded-2xl text-white font-semibold bg-linear-to-r from-indigo-500 to-pink-500"
           >
             {isLoading ? (
               <div className="flex items-center justify-center gap-2">
