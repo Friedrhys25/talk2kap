@@ -1,18 +1,49 @@
+// MessageTable.jsx - Updated to use Firestore
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  FiMail,
-  FiX,
-  FiSearch,
-  FiSend,
-  FiMapPin,
-  FiFileText,
-  FiMessageSquare,
-  FiBell,
-  FiCheck,
+  FiMail, FiX, FiSearch, FiSend, FiMapPin,
+  FiFileText, FiMessageSquare, FiBell, FiCheck,
 } from "react-icons/fi";
-import { ref, onValue, push, update } from "firebase/database";
-import { db } from "../../firebaseConfig";
+import {
+  getFirestore,
+  collection,
+  onSnapshot,
+  addDoc,
+  doc,
+  updateDoc,
+  serverTimestamp,
+  Timestamp,
+} from "firebase/firestore";
+import app from "../../firebaseConfig";
 
+const firestore = getFirestore(app);
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const formatTimestamp = (ts) => {
+  if (!ts) return "";
+  if (ts?.toDate) return ts.toDate().toLocaleString();
+  if (typeof ts === "string") return ts;
+  if (typeof ts === "number") return new Date(ts).toLocaleString();
+  return "";
+};
+
+const getIssueColor = (type) => {
+  const colors = {
+    medical:        "bg-red-100 text-red-800 border-red-200",
+    fire:           "bg-orange-100 text-orange-800 border-orange-200",
+    noise:          "bg-purple-100 text-purple-800 border-purple-200",
+    waste:          "bg-green-100 text-green-800 border-green-200",
+    infrastructure: "bg-gray-100 text-gray-800 border-gray-200",
+  };
+  return colors[(type || "").toLowerCase()] || "bg-gray-100 text-gray-800 border-gray-200";
+};
+
+const getStatusDisplay = (status) => ({
+  unread: { color: "bg-yellow-100 text-yellow-800 border-yellow-200", text: "Unread" },
+  read:   { color: "bg-emerald-100 text-emerald-800 border-emerald-200", text: "Read"   },
+}[status] || { color: "bg-yellow-100 text-yellow-800 border-yellow-200", text: "Unread" });
+
+// ── Main Component ────────────────────────────────────────────────────────────
 const MessageTable = () => {
   const [filter, setFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -21,71 +52,101 @@ const MessageTable = () => {
   const [reply, setReply] = useState("");
   const messagesEndRef = useRef(null);
 
-  // ✅ Load complaints + chat dynamically from Firebase
+  // ── Firestore listener ──────────────────────────────────────────────────────
   useEffect(() => {
-    const usersRef = ref(db, "users");
-    return onValue(usersRef, (snapshot) => {
-      const data = snapshot.val();
-      const convos = [];
+    const usersRef = collection(firestore, "users");
+    const innerUnsubs = [];
 
-      if (data) {
-        Object.entries(data).forEach(([userId, user]) => {
-          if (user.userComplaints) {
-            Object.entries(user.userComplaints).forEach(([complaintId, complaint]) => {
-              const fullName =
-                `${user.firstName || ""} ${user.middleName || ""} ${user.lastName || ""}`.trim() ||
-                "Anonymous";
+    // convoMap: complaintId -> conversation object
+    const convoMap = {};
 
-              const messages = complaint.chat
-                ? Object.entries(complaint.chat).map(([chatUid, chat]) => ({ id: chatUid, ...chat }))
-                : [];
-
-              const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
-
-              const unreadFromUser = messages.filter(
-                (msg) => msg.senderId !== "admin" && msg.read === false
-              );
-              const unreadCount = unreadFromUser.length;
-              const hasUnreadMessages = unreadCount > 0;
-
-              convos.push({
-                id: complaintId,
-                userId,
-                complaintId,
-                complainant: fullName,
-                purok: complaint.purok || user.incidentPurok || "—",
-                issueType: complaint.type || "—",
-                description: complaint.message || "—",
-                messages,
-                status: hasUnreadMessages ? "unread" : "read",
-                lastMessage: lastMsg?.message || "No messages yet",
-                hasMessages: messages.length > 0,
-                unreadCount,
-              });
-            });
-          }
-        });
-      }
-
-      // ✅ Sort: unread first, then those with messages, then alphabetically
+    const rebuild = () => {
+      const convos = Object.values(convoMap);
       convos.sort((a, b) => {
         if (a.status !== b.status) return a.status === "unread" ? -1 : 1;
         if (a.hasMessages !== b.hasMessages) return b.hasMessages - a.hasMessages;
         return a.complainant.localeCompare(b.complainant);
       });
+      setConversations([...convos]);
+    };
 
-      setConversations(convos);
+    const unsubUsers = onSnapshot(usersRef, (usersSnapshot) => {
+      usersSnapshot.forEach((userDoc) => {
+        const userId   = userDoc.id;
+        const userData = userDoc.data();
+        const fullName = [userData.firstName, userData.middleName, userData.lastName]
+          .filter(Boolean).join(" ").trim() || "Anonymous";
+
+        const complaintsRef = collection(firestore, "users", userId, "userComplaints");
+
+        const unsubComplaints = onSnapshot(complaintsRef, (complaintsSnap) => {
+          complaintsSnap.forEach((cDoc) => {
+            const complaint    = cDoc.data();
+            const complaintId  = cDoc.id;
+            const chatRef      = collection(firestore, "users", userId, "userComplaints", complaintId, "chat");
+
+            const unsubChat = onSnapshot(chatRef, (chatSnap) => {
+              const messages = [];
+              chatSnap.forEach((msgDoc) => {
+                messages.push({ id: msgDoc.id, ...msgDoc.data() });
+              });
+
+              // Sort messages by timestamp ascending
+              messages.sort((a, b) => {
+                const ta = a.timestamp?.toDate?.() || new Date(a.timestamp || 0);
+                const tb = b.timestamp?.toDate?.() || new Date(b.timestamp || 0);
+                return ta - tb;
+              });
+
+              const lastMsg      = messages.length > 0 ? messages[messages.length - 1] : null;
+              const unreadCount  = messages.filter((m) => m.senderId !== "admin" && m.read === false).length;
+
+              convoMap[complaintId] = {
+                id:           complaintId,
+                userId,
+                complaintId,
+                complainant:  fullName,
+                purok:        complaint.incidentPurok || complaint.purok || userData.purok || "—",
+                issueType:    complaint.type    || "—",
+                description:  complaint.message || "—",
+                messages,
+                status:       unreadCount > 0 ? "unread" : "read",
+                lastMessage:  lastMsg ? formatTimestamp(lastMsg.timestamp) ? `${lastMsg.message}` : lastMsg.message : "No messages yet",
+                hasMessages:  messages.length > 0,
+                unreadCount,
+              };
+
+              rebuild();
+
+              // Keep selectedConversation in sync
+              setSelectedConversation((prev) => {
+                if (!prev || prev.complaintId !== complaintId) return prev;
+                return { ...convoMap[complaintId] };
+              });
+            });
+
+            innerUnsubs.push(unsubChat);
+          });
+        });
+
+        innerUnsubs.push(unsubComplaints);
+      });
     });
+
+    return () => {
+      unsubUsers();
+      innerUnsubs.forEach((u) => u());
+    };
   }, []);
 
-  const stats = useMemo(() => {
-    return {
-      total: conversations.length,
-      unread: conversations.filter((c) => c.status === "unread").length,
-      read: conversations.filter((c) => c.status === "read").length,
-    };
-  }, [conversations]);
+  // ── Stats ───────────────────────────────────────────────────────────────────
+  const stats = useMemo(() => ({
+    total:  conversations.length,
+    unread: conversations.filter((c) => c.status === "unread").length,
+    read:   conversations.filter((c) => c.status === "read").length,
+  }), [conversations]);
 
+  // ── Filtered list ───────────────────────────────────────────────────────────
   const filteredConversations = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return conversations.filter((c) => {
@@ -100,105 +161,48 @@ const MessageTable = () => {
     });
   }, [conversations, filter, searchTerm]);
 
+  // ── Open conversation + mark messages read ──────────────────────────────────
   const openConversation = async (conversation) => {
     setSelectedConversation(conversation);
-
     const { userId, complaintId, messages } = conversation;
 
     try {
-      const unreadMessages = messages.filter((msg) => msg.senderId !== "admin" && msg.read === false);
-
-      for (const msg of unreadMessages) {
-        const messageRef = ref(db, `users/${userId}/userComplaints/${complaintId}/chat/${msg.id}`);
-        await update(messageRef, { read: true });
+      const unread = messages.filter((m) => m.senderId !== "admin" && m.read === false);
+      for (const msg of unread) {
+        await updateDoc(
+          doc(firestore, "users", userId, "userComplaints", complaintId, "chat", msg.id),
+          { read: true }
+        );
       }
-
-      // Update local state
-      setConversations((prev) => {
-        const updated = prev.map((c) => {
-          if (c.complaintId === complaintId) {
-            const updatedMessages = c.messages.map((m) => ({
-              ...m,
-              read: m.senderId === "admin" ? m.read : true,
-            }));
-
-            return {
-              ...c,
-              messages: updatedMessages,
-              status: "read",
-              unreadCount: 0,
-            };
-          }
-          return c;
-        });
-
-        return updated.sort((a, b) => {
-          if (a.status !== b.status) return a.status === "unread" ? -1 : 1;
-          if (a.hasMessages !== b.hasMessages) return b.hasMessages - a.hasMessages;
-          return a.complainant.localeCompare(b.complainant);
-        });
-      });
-
-      // Update selected conversation
-      setSelectedConversation((prev) => {
-        if (!prev) return prev;
-        const updatedMessages = prev.messages.map((m) => ({
-          ...m,
-          read: m.senderId === "admin" ? m.read : true,
-        }));
-        return { ...prev, messages: updatedMessages, status: "read", unreadCount: 0 };
-      });
-    } catch (error) {
-      console.error("Error marking messages as read:", error);
+    } catch (err) {
+      console.error("Error marking messages as read:", err);
     }
   };
 
+  // ── Send reply ──────────────────────────────────────────────────────────────
   const handleSendReply = async () => {
     if (!reply.trim() || !selectedConversation) return;
-
     const { userId, complaintId } = selectedConversation;
-    const chatRef = ref(db, `users/${userId}/userComplaints/${complaintId}/chat`);
 
-    const newMessage = {
-      senderId: "admin",
-      message: reply.trim(),
-      timestamp: new Date().toLocaleString(),
-      read: false, // unread for user
-    };
-
-    const pushed = await push(chatRef, newMessage);
-
-    const localMsg = { id: pushed.key || `${Date.now()}`, ...newMessage };
-
-    setSelectedConversation((prev) =>
-      prev
-        ? {
-            ...prev,
-            messages: [...prev.messages, localMsg],
-            hasMessages: true,
-            lastMessage: localMsg.message,
-          }
-        : prev
-    );
-
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.complaintId === complaintId
-          ? {
-              ...c,
-              hasMessages: true,
-              messages: [...c.messages, localMsg],
-              lastMessage: localMsg.message,
-            }
-          : c
-      )
-    );
-
-    setReply("");
+    try {
+      await addDoc(
+        collection(firestore, "users", userId, "userComplaints", complaintId, "chat"),
+        {
+          senderId:  "admin",
+          message:   reply.trim(),
+          timestamp: serverTimestamp(),
+          read:      false,
+        }
+      );
+      setReply("");
+    } catch (err) {
+      console.error("Error sending reply:", err);
+    }
   };
 
+  // ── Auto-scroll ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [selectedConversation?.messages?.length]);
 
   const handleKeyDown = (e) => {
@@ -208,29 +212,9 @@ const MessageTable = () => {
     }
   };
 
-  const getIssueColor = (type) => {
-    const colors = {
-      medical: "bg-red-100 text-red-800 border-red-200",
-      fire: "bg-orange-100 text-orange-800 border-orange-200",
-      noise: "bg-purple-100 text-purple-800 border-purple-200",
-      waste: "bg-green-100 text-green-800 border-green-200",
-      infrastructure: "bg-gray-100 text-gray-800 border-gray-200",
-    };
-    const key = (type || "").toLowerCase();
-    return colors[key] || "bg-gray-100 text-gray-800 border-gray-200";
-  };
-
-  const getStatusDisplay = (status) => {
-    const statusConfig = {
-      unread: { color: "bg-yellow-100 text-yellow-800 border-yellow-200", text: "Unread" },
-      read: { color: "bg-emerald-100 text-emerald-800 border-emerald-200", text: "Read" },
-    };
-    return statusConfig[status] || statusConfig.unread;
-  };
-
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
-      {/* Background watermark */}
+    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50">
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -245,12 +229,10 @@ const MessageTable = () => {
       />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-8 space-y-6">
-        {/* Top Bar: Title + Search */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3">
-           
-          </div>
 
+        {/* Search */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div />
           <div className="relative w-full lg:w-[420px]">
             <FiSearch className="absolute left-3 top-1/2 text-gray-400 -translate-y-1/2" />
             <input
@@ -265,51 +247,29 @@ const MessageTable = () => {
 
         {/* Stats + Filters */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Stats */}
           <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
             {Object.entries(stats).map(([key, value]) => (
-              <div
-                key={key}
-                className="relative overflow-hidden rounded-2xl border border-white/60 bg-white/75 backdrop-blur shadow-lg"
-              >
+              <div key={key} className="relative overflow-hidden rounded-2xl border border-white/60 bg-white/75 backdrop-blur shadow-lg">
                 <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-indigo-500/10 blur-2xl" />
                 <div className="relative p-4">
-                  <p className="text-xs font-extrabold uppercase tracking-wider text-gray-600">
-                    {key}
-                  </p>
-                  <p
-                    className={`mt-1 text-3xl font-extrabold tracking-tight ${
-                      key === "unread"
-                        ? "text-yellow-700"
-                        : key === "read"
-                        ? "text-emerald-700"
-                        : "text-gray-900"
-                    }`}
-                  >
-                    {value}
-                  </p>
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-gray-600">{key}</p>
+                  <p className={`mt-1 text-3xl font-extrabold tracking-tight ${
+                    key === "unread" ? "text-yellow-700" : key === "read" ? "text-emerald-700" : "text-gray-900"
+                  }`}>{value}</p>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Filter buttons */}
           <div className="lg:col-span-4">
             <div className="rounded-2xl border border-white/60 bg-white/75 backdrop-blur shadow-lg p-4">
-              <p className="text-xs font-extrabold uppercase tracking-wider text-gray-600 mb-3">
-                Filter
-              </p>
+              <p className="text-xs font-extrabold uppercase tracking-wider text-gray-600 mb-3">Filter</p>
               <div className="flex flex-wrap gap-2">
                 {["all", "unread", "read"].map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
+                  <button key={f} onClick={() => setFilter(f)}
                     className={`px-4 py-2 rounded-xl text-sm font-bold transition ${
-                      filter === f
-                        ? "bg-indigo-600 text-white shadow-md"
-                        : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
+                      filter === f ? "bg-indigo-600 text-white shadow-md" : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
+                    }`}>
                     {f.charAt(0).toUpperCase() + f.slice(1)}
                   </button>
                 ))}
@@ -324,30 +284,18 @@ const MessageTable = () => {
             <table className="w-full min-w-[980px] text-left">
               <thead className="bg-white sticky top-0 z-10">
                 <tr className="border-b border-gray-200">
-                  {["Complainant", "Purok", "Issue Type", "Description", "Last Message", "Status"].map(
-                    (header) => (
-                      <th
-                        key={header}
-                        className="px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-gray-600"
-                      >
-                        {header}
-                      </th>
-                    )
-                  )}
+                  {["Complainant", "Purok", "Issue Type", "Description", "Last Message", "Status"].map((h) => (
+                    <th key={h} className="px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-gray-600">{h}</th>
+                  ))}
                 </tr>
               </thead>
-
               <tbody>
                 {filteredConversations.map((c, idx) => {
                   const status = getStatusDisplay(c.status);
                   return (
-                    <tr
-                      key={c.id}
-                      className={`border-b border-gray-100 transition cursor-pointer ${
-                        idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
-                      } hover:bg-indigo-50/50`}
-                      onClick={() => openConversation(c)}
-                    >
+                    <tr key={c.id}
+                      className={`border-b border-gray-100 transition cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-indigo-50/50`}
+                      onClick={() => openConversation(c)}>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-gray-900">{c.complainant}</span>
@@ -361,58 +309,37 @@ const MessageTable = () => {
                           )}
                         </div>
                       </td>
-
+                      <td className="px-6 py-4 font-semibold text-gray-800">Purok {c.purok}</td>
                       <td className="px-6 py-4">
-                        <span className="font-semibold text-gray-800">Purok {c.purok}</span>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border ${getIssueColor(
-                            c.issueType
-                          )}`}
-                        >
+                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border ${getIssueColor(c.issueType)}`}>
                           {c.issueType}
                         </span>
                       </td>
-
                       <td className="px-6 py-4 max-w-xs truncate" title={c.description}>
                         <span className="text-sm text-gray-700">{c.description}</span>
                       </td>
-
                       <td className="px-6 py-4 max-w-xs">
                         <div className="flex items-center gap-2">
-                          <span className="truncate text-sm text-gray-700" title={c.lastMessage}>
-                            {c.lastMessage}
-                          </span>
-                          {c.status === "unread" && (
-                            <FiBell className="text-red-500 animate-pulse shrink-0" size={16} />
-                          )}
+                          <span className="truncate text-sm text-gray-700" title={c.lastMessage}>{c.lastMessage}</span>
+                          {c.status === "unread" && <FiBell className="text-red-500 animate-pulse shrink-0" size={16} />}
                         </div>
                       </td>
-
                       <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border ${status.color}`}
-                        >
+                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border ${status.color}`}>
                           {status.text}
                         </span>
                       </td>
                     </tr>
                   );
                 })}
-
                 {filteredConversations.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center py-10 text-gray-500 font-semibold">
-                      No messages found
-                    </td>
+                    <td colSpan={6} className="text-center py-10 text-gray-500 font-semibold">No messages found</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-
           <div className="px-6 py-4 text-xs text-gray-500 font-semibold border-t border-gray-100">
             Tip: Unread conversations are prioritized at the top.
           </div>
@@ -420,25 +347,16 @@ const MessageTable = () => {
 
         {/* Chat Modal */}
         {selectedConversation && (
-          <div
-            className="fixed inset-0 bg-black/35 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            onClick={() => setSelectedConversation(null)}
-          >
-            <div
-              className="bg-white rounded-[22px] w-full max-w-3xl max-h-[92vh] relative shadow-2xl flex flex-col overflow-hidden border border-white/60"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="relative p-6 text-white bg-linear-to-r from-indigo-600 via-blue-600 to-indigo-700 shrink-0">
-                <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-3xl" />
-                <button
-                  className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full p-2 transition-all"
-                  onClick={() => setSelectedConversation(null)}
-                  title="Close"
-                >
-                  <FiX size={22} />
-                </button>
+          <div className="fixed inset-0 bg-black/35 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setSelectedConversation(null)}>
+            <div className="bg-white rounded-[22px] w-full max-w-3xl max-h-[92vh] relative shadow-2xl flex flex-col overflow-hidden border border-white/60"
+              onClick={(e) => e.stopPropagation()}>
 
+              {/* Modal header */}
+              <div className="relative p-6 text-white bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-700 shrink-0">
+                <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-3xl" />
+                <button className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full p-2 transition-all"
+                  onClick={() => setSelectedConversation(null)}><FiX size={22} /></button>
                 <div className="relative">
                   <h2 className="text-xl md:text-2xl font-extrabold flex items-center gap-2">
                     <FiMail /> {selectedConversation.complainant}
@@ -452,35 +370,18 @@ const MessageTable = () => {
               {/* Details */}
               <div className="p-5 bg-slate-50 border-b shrink-0">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <InfoPill
-                    icon={<FiMapPin className="text-emerald-600" />}
-                    label="Purok"
-                    value={`Purok ${selectedConversation.purok}`}
-                    tone="emerald"
-                  />
-                  <InfoPill
-                    icon={<FiFileText className="text-purple-600" />}
-                    label="Issue"
-                    value={selectedConversation.issueType}
-                    tone="purple"
-                    badgeClass={getIssueColor(selectedConversation.issueType)}
-                  />
-                  <InfoPill
-                    icon={<FiMessageSquare className="text-blue-600" />}
-                    label="Status"
-                    value={getStatusDisplay(selectedConversation.status).text}
-                    tone="blue"
-                    badgeClass={getStatusDisplay(selectedConversation.status).color}
-                  />
+                  <InfoPill icon={<FiMapPin className="text-emerald-600" />} label="Purok"
+                    value={`Purok ${selectedConversation.purok}`} tone="emerald" />
+                  <InfoPill icon={<FiFileText className="text-purple-600" />} label="Issue"
+                    value={selectedConversation.issueType} tone="purple"
+                    badgeClass={getIssueColor(selectedConversation.issueType)} />
+                  <InfoPill icon={<FiMessageSquare className="text-blue-600" />} label="Status"
+                    value={getStatusDisplay(selectedConversation.status).text} tone="blue"
+                    badgeClass={getStatusDisplay(selectedConversation.status).color} />
                 </div>
-
                 <div className="mt-4 bg-white rounded-xl border border-gray-200 p-4">
-                  <p className="text-xs text-gray-500 font-extrabold uppercase tracking-wider mb-2">
-                    Description
-                  </p>
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    {selectedConversation.description}
-                  </p>
+                  <p className="text-xs text-gray-500 font-extrabold uppercase tracking-wider mb-2">Description</p>
+                  <p className="text-sm text-gray-700 leading-relaxed">{selectedConversation.description}</p>
                 </div>
               </div>
 
@@ -497,28 +398,17 @@ const MessageTable = () => {
                     const isAdmin = m.senderId === "admin";
                     return (
                       <div key={m.id} className={`flex ${isAdmin ? "justify-end" : "justify-start"}`}>
-                        <div
-                          className={`max-w-[78%] rounded-2xl px-4 py-3 shadow-sm border ${
-                            isAdmin
-                              ? "bg-indigo-600 text-white border-indigo-600"
-                              : "bg-slate-100 text-gray-900 border-slate-200"
-                          }`}
-                        >
+                        <div className={`max-w-[78%] rounded-2xl px-4 py-3 shadow-sm border ${
+                          isAdmin ? "bg-indigo-600 text-white border-indigo-600" : "bg-slate-100 text-gray-900 border-slate-200"
+                        }`}>
                           <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.message}</p>
                           <div className="mt-2 flex items-center justify-between gap-4">
                             <span className={`text-[11px] font-semibold ${isAdmin ? "text-indigo-100" : "text-gray-500"}`}>
-                              {m.timestamp}
+                              {formatTimestamp(m.timestamp)}
                             </span>
-
                             {!isAdmin && (
                               <span className={`text-[11px] font-extrabold ${m.read ? "text-emerald-700" : "text-rose-700"}`}>
-                                {m.read ? (
-                                  <span className="inline-flex items-center gap-1">
-                                    <FiCheck /> Read
-                                  </span>
-                                ) : (
-                                  "Sent"
-                                )}
+                                {m.read ? <span className="inline-flex items-center gap-1"><FiCheck /> Read</span> : "Sent"}
                               </span>
                             )}
                           </div>
@@ -533,24 +423,20 @@ const MessageTable = () => {
               {/* Reply */}
               <div className="p-5 border-t bg-white shrink-0">
                 <div className="flex gap-2">
-                  <textarea
-                    rows={3}
-                    value={reply}
+                  <textarea rows={3} value={reply}
                     onChange={(e) => setReply(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder={`Reply to ${selectedConversation.complainant}...`}
                     className="flex-1 rounded-xl border border-gray-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   />
-                  <button
-                    onClick={handleSendReply}
-                    className="bg-indigo-600 text-white px-5 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition font-extrabold shadow-md"
-                    title="Send"
-                  >
+                  <button onClick={handleSendReply}
+                    className="bg-indigo-600 text-white px-5 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition font-extrabold shadow-md">
                     <FiSend /> Send
                   </button>
                 </div>
                 <p className="mt-2 text-[11px] text-gray-500 font-semibold">
-                  Press <span className="font-extrabold">Enter</span> to send • <span className="font-extrabold">Shift + Enter</span> for new line
+                  Press <span className="font-extrabold">Enter</span> to send •{" "}
+                  <span className="font-extrabold">Shift + Enter</span> for new line
                 </p>
               </div>
             </div>
@@ -563,27 +449,19 @@ const MessageTable = () => {
 
 export default MessageTable;
 
-/* =======================
-   Small helper components
-======================= */
-
+/* ── Helper component ────────────────────────────────────────────────────────*/
 const InfoPill = ({ icon, label, value, tone = "blue", badgeClass }) => {
   const tones = {
-    emerald: "bg-emerald-100",
-    purple: "bg-purple-100",
-    blue: "bg-blue-100",
-    indigo: "bg-indigo-100",
+    emerald: "bg-emerald-100", purple: "bg-purple-100",
+    blue:    "bg-blue-100",    indigo: "bg-indigo-100",
   };
-
   return (
     <div className="flex items-start gap-3 bg-white rounded-xl border border-gray-200 p-4">
       <div className={`shrink-0 p-2 rounded-lg ${tones[tone] || tones.blue}`}>{icon}</div>
       <div className="min-w-0">
         <p className="text-[11px] text-gray-500 font-extrabold uppercase tracking-wider">{label}</p>
         {badgeClass ? (
-          <span className={`inline-flex mt-1 px-3 py-1 rounded-full text-xs font-extrabold border ${badgeClass}`}>
-            {value}
-          </span>
+          <span className={`inline-flex mt-1 px-3 py-1 rounded-full text-xs font-extrabold border ${badgeClass}`}>{value}</span>
         ) : (
           <p className="mt-1 text-sm font-extrabold text-gray-900 truncate">{value}</p>
         )}
