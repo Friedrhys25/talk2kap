@@ -214,7 +214,7 @@ const MessageTable = () => {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50">
+    <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -353,7 +353,7 @@ const MessageTable = () => {
               onClick={(e) => e.stopPropagation()}>
 
               {/* Modal header */}
-              <div className="relative p-6 text-white bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-700 shrink-0">
+              <div className="relative p-6 text-white bg-linear-to-r from-indigo-600 via-blue-600 to-indigo-700 shrink-0">
                 <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-3xl" />
                 <button className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full p-2 transition-all"
                   onClick={() => setSelectedConversation(null)}><FiX size={22} /></button>
