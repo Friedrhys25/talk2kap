@@ -2,8 +2,8 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database";
+import { getFirestore } from "firebase/firestore"; // ← ADD THIS
 
-// replace with your web app config from Firebase console
 const firebaseConfig = {
   apiKey: "AIzaSyCClZL4LQep_2AiJGLAsnq818DePxn9YT4",
   authDomain: "talk2kap-8c526.firebaseapp.com",
@@ -16,6 +16,8 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
 export const auth = getAuth(app);
-export const db = getDatabase(app);
+export const db = getDatabase(app);         // Realtime Database (keep for other pages)
+export const firestore = getFirestore(app); // ← ADD THIS (Firestore for complaints)
 export default app;

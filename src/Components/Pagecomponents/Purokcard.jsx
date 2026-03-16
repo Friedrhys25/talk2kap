@@ -1,88 +1,90 @@
-// HoverDevCards.jsx - Firebase ONLY (no hardcoded complaint counts)
-// ✅ Removed basePurokStats (no hardcoded complaint data)
-// ✅ Counts ALL complaints from Firebase Realtime Database (users/*/userComplaints/*)
-// ✅ Uses SAME tally logic as ReportAnalytics: urgent = label === 'urgent', nonUrgent = everything else
-// ✅ Uses incidentPurok from the complaint (1–6)
-
-// NOTE (important for matching totals):
-// If your ReportAnalytics still adds "baseMonthlyData", it will NOT match this (Firebase-only) dashboard.
-// To make them match 1:1, ReportAnalytics must also be Firebase-only (remove the base monthly/week data).
-
+// HoverDevCards.jsx - Firestore version (matches Notiftable.jsx pattern)
 import React, { useState, useEffect, useMemo } from "react";
-import { FiArrowLeft, FiAlertTriangle, FiClock, FiGrid, FiMapPin, FiTrendingUp } from "react-icons/fi";
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Cell,
-  LabelList,
-  CartesianGrid,
+  FiArrowLeft, FiAlertTriangle, FiClock,
+  FiGrid, FiMapPin, FiTrendingUp,
+} from "react-icons/fi";
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
+  Tooltip, Cell, LabelList, CartesianGrid,
 } from "recharts";
-import { ref, onValue } from "firebase/database";
-import { db } from "../../firebaseConfig";
+import {
+  getFirestore,
+  collection,
+  onSnapshot,
+} from "firebase/firestore";
+import app from "../../firebaseConfig";
 
+const firestore = getFirestore(app);
 const PUROKS = [1, 2, 3, 4, 5, 6];
 
+// ── Main component ────────────────────────────────────────────────────────────
 const HoverDevCards = ({ onPurokSelect, selectedPurok, onBackToDashboard }) => {
-  // ✅ Firebase-only stats (init to zeros)
   const [purokStats, setPurokStats] = useState(() =>
-    PUROKS.reduce((acc, p) => {
-      acc[p] = { urgent: 0, nonUrgent: 0 };
-      return acc;
-    }, {})
+    PUROKS.reduce((acc, p) => { acc[p] = { urgent: 0, nonUrgent: 0 }; return acc; }, {})
   );
-
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const usersRef = ref(db, "users");
+    const usersRef = collection(firestore, "users");
+    const innerUnsubs = [];
 
-    const unsubscribe = onValue(usersRef, (snapshot) => {
-      // start with zeros every refresh
-      const nextStats = PUROKS.reduce((acc, p) => {
-        acc[p] = { urgent: 0, nonUrgent: 0 };
-        return acc;
-      }, {});
+    const unsubUsers = onSnapshot(
+      usersRef,
+      (usersSnapshot) => {
+        // Reset stats to zero for a clean tally
+        const nextStats = PUROKS.reduce((acc, p) => {
+          acc[p] = { urgent: 0, nonUrgent: 0 };
+          return acc;
+        }, {});
 
-      if (!snapshot.exists()) {
-        setPurokStats(nextStats);
-        setLoading(false);
-        return;
-      }
+        let pendingUsers = usersSnapshot.size;
+        if (pendingUsers === 0) {
+          setPurokStats(nextStats);
+          setLoading(false);
+          return;
+        }
 
-      const usersData = snapshot.val();
+        usersSnapshot.forEach((userDoc) => {
+          const userId = userDoc.id;
+          const complaintsRef = collection(firestore, "users", userId, "userComplaints");
 
-      // ✅ Collect and tally ALL complaints from Firebase
-      Object.keys(usersData).forEach((userId) => {
-        const user = usersData[userId];
-        const complaintsObj = user?.userComplaints;
+          const unsubComplaints = onSnapshot(complaintsRef, (complaintsSnap) => {
+            // Recalculate all stats fresh on every update
+            const freshStats = PUROKS.reduce((acc, p) => {
+              acc[p] = { urgent: 0, nonUrgent: 0 };
+              return acc;
+            }, {});
 
-        if (!complaintsObj) return;
+            // We need ALL users' complaints — rebuild from scratch each time
+            // by re-reading from our accumulated snapshot map
+            complaintsSnap.forEach((cDoc) => {
+              const c = cDoc.data();
+              const raw = c?.incidentPurok ?? c?.purok;
+              const purok = parseInt(raw, 10);
+              if (!Number.isFinite(purok) || purok < 1 || purok > 6) return;
 
-        Object.keys(complaintsObj).forEach((complaintId) => {
-          const complaint = complaintsObj[complaintId];
+              if (c?.label === "urgent") nextStats[purok].urgent += 1;
+              else nextStats[purok].nonUrgent += 1;
+            });
 
-          // Use incidentPurok from complaint (same as your earlier code)
-          const incidentPurokRaw = complaint?.incidentPurok ?? complaint?.purok;
-          const incidentPurok = incidentPurokRaw ? parseInt(incidentPurokRaw, 10) : NaN;
+            setPurokStats({ ...nextStats });
+            setLoading(false);
+          });
 
-          if (!Number.isFinite(incidentPurok)) return;
-          if (incidentPurok < 1 || incidentPurok > 6) return;
-
-          const isUrgent = complaint?.label === "urgent"; // ✅ same rule as ReportAnalytics
-          if (isUrgent) nextStats[incidentPurok].urgent += 1;
-          else nextStats[incidentPurok].nonUrgent += 1;
+          innerUnsubs.push(unsubComplaints);
         });
-      });
+      },
+      (err) => {
+        console.error("Firestore error:", err);
+        setLoading(false);
+      }
+    );
 
-      setPurokStats(nextStats);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    return () => {
+      unsubUsers();
+      innerUnsubs.forEach((u) => u());
+    };
   }, []);
 
   const totals = useMemo(() => {
@@ -96,7 +98,7 @@ const HoverDevCards = ({ onPurokSelect, selectedPurok, onBackToDashboard }) => {
     return (
       <div className="min-h-screen p-6 flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto mb-4" />
           <p className="text-gray-600 font-medium">Loading dashboard data...</p>
         </div>
       </div>
@@ -115,7 +117,7 @@ const HoverDevCards = ({ onPurokSelect, selectedPurok, onBackToDashboard }) => {
 
   return (
     <div className="min-h-screen p-6 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 relative">
-      {/* Background Watermark Logo */}
+      {/* Watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -133,9 +135,9 @@ const HoverDevCards = ({ onPurokSelect, selectedPurok, onBackToDashboard }) => {
         {/* Header */}
         <div className="text-center space-y-3 pt-2">
           <div className="flex items-center justify-center gap-4 mb-2">
-            <div className="h-1 w-16 bg-gradient-to-r from-transparent to-indigo-500 rounded-full"></div>
+            <div className="h-1 w-16 bg-gradient-to-r from-transparent to-indigo-500 rounded-full" />
             <FiGrid className="text-indigo-600 text-4xl animate-pulse" />
-            <div className="h-1 w-16 bg-gradient-to-l from-transparent to-indigo-500 rounded-full"></div>
+            <div className="h-1 w-16 bg-gradient-to-l from-transparent to-indigo-500 rounded-full" />
           </div>
 
           <h1 className="text-5xl md:text-6xl font-extrabold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
@@ -160,7 +162,7 @@ const HoverDevCards = ({ onPurokSelect, selectedPurok, onBackToDashboard }) => {
           </div>
         </div>
 
-        {/* Cards */}
+        {/* Purok Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {PUROKS.map((p) => (
             <PurokCard
@@ -177,23 +179,16 @@ const HoverDevCards = ({ onPurokSelect, selectedPurok, onBackToDashboard }) => {
   );
 };
 
-/* ===========================
-   UI COMPONENTS
-=========================== */
-
+// ── UI helpers ────────────────────────────────────────────────────────────────
 const Pill = ({ color = "indigo", icon, children }) => {
   const map = {
     indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
-    red: "bg-red-50 text-red-700 border-red-200",
-    blue: "bg-blue-50 text-blue-700 border-blue-200",
-    gray: "bg-gray-50 text-gray-700 border-gray-200",
+    red:    "bg-red-50 text-red-700 border-red-200",
+    blue:   "bg-blue-50 text-blue-700 border-blue-200",
+    gray:   "bg-gray-50 text-gray-700 border-gray-200",
   };
   return (
-    <span
-      className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-bold shadow-sm ${
-        map[color] || map.gray
-      }`}
-    >
+    <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-bold shadow-sm ${map[color] || map.gray}`}>
       <span className="text-sm">{icon}</span>
       {children}
     </span>
@@ -211,7 +206,6 @@ const PurokCard = ({ purokNo, urgent, nonUrgent, onClick }) => {
                  shadow-md hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-300"
     >
       <div className="h-1.5 w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600" />
-
       <div className="absolute -top-16 -right-16 w-52 h-52 rounded-full bg-indigo-100/70 blur-2xl group-hover:bg-purple-100/80 transition-colors" />
       <div className="absolute -bottom-16 -left-16 w-52 h-52 rounded-full bg-pink-100/60 blur-2xl group-hover:bg-indigo-100/70 transition-colors" />
 
@@ -226,10 +220,8 @@ const PurokCard = ({ purokNo, urgent, nonUrgent, onClick }) => {
               <h3 className="text-2xl font-extrabold text-gray-900 leading-tight">{purokNo}</h3>
             </div>
           </div>
-
           <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-extrabold">
-            <FiTrendingUp />
-            Total: {total}
+            <FiTrendingUp /> Total: {total}
           </span>
         </div>
 
@@ -254,7 +246,6 @@ const PurokCard = ({ purokNo, urgent, nonUrgent, onClick }) => {
             </div>
             <p className="mt-1 text-3xl font-extrabold text-gray-900">{urgent}</p>
           </div>
-
           <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
             <div className="flex items-center gap-2 text-blue-700">
               <FiClock />
@@ -267,12 +258,7 @@ const PurokCard = ({ purokNo, urgent, nonUrgent, onClick }) => {
         <div className="mt-5 flex items-center justify-end">
           <span className="inline-flex items-center gap-2 text-indigo-700 font-extrabold text-sm">
             View details
-            <svg
-              className="w-4 h-4 group-hover:translate-x-0.5 transition-transform"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
             </svg>
           </span>
@@ -297,59 +283,30 @@ const CustomTooltip = ({ active, payload }) => {
   return null;
 };
 
-/* ===========================
-   PUROK INFO (DETAIL VIEW)
-=========================== */
-
+// ── Purok Detail View ─────────────────────────────────────────────────────────
 const PurokInfo = ({ purokNumber, onBack, purokStats }) => {
-  const [purokData, setPurokData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const basePurokInfo = {
+    1: { name: "Purok 1", description: "Information about Purok 1", residents: 1228 },
+    2: { name: "Purok 2", description: "Information about Purok 2", residents: 1576 },
+    3: { name: "Purok 3", description: "Information about Purok 3", residents: 2894 },
+    4: { name: "Purok 4", description: "Information about Purok 4", residents: 1553 },
+    5: { name: "Purok 5", description: "Information about Purok 5", residents: 3481 },
+    6: { name: "Purok 6", description: "Information about Purok 6", residents: 3074 },
+  };
 
-  useEffect(() => {
-    const usersRef = ref(db, "users");
-
-    const unsubscribe = onValue(usersRef, () => {
-      // ✅ Keep only demographic info hardcoded (NOT complaint counts)
-      const basePurokInfo = {
-        1: { name: "Purok 1", description: "Information about Purok 1", residents: 1228 },
-        2: { name: "Purok 2", description: "Information about Purok 2", residents: 1576 },
-        3: { name: "Purok 3", description: "Information about Purok 3", residents: 2894 },
-        4: { name: "Purok 4", description: "Information about Purok 4", residents: 1553 },
-        5: { name: "Purok 5", description: "Information about Purok 5", residents: 3481 },
-        6: { name: "Purok 6", description: "Information about Purok 6", residents: 3074 },
-      };
-
-      const baseInfo = basePurokInfo[purokNumber];
-      const stats = purokStats[purokNumber] || { urgent: 0, nonUrgent: 0 };
-
-      setPurokData({
-        ...baseInfo,
-        complaints: stats.urgent + stats.nonUrgent,
-        urgent: stats.urgent,
-        nonUrgent: stats.nonUrgent,
-      });
-
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [purokNumber, purokStats]);
-
-  if (loading || !purokData) {
-    return (
-      <div className="min-h-screen p-6 flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading purok data...</p>
-        </div>
-      </div>
-    );
-  }
+  const baseInfo = basePurokInfo[purokNumber];
+  const stats = purokStats[purokNumber] || { urgent: 0, nonUrgent: 0 };
+  const purokData = {
+    ...baseInfo,
+    complaints: stats.urgent + stats.nonUrgent,
+    urgent: stats.urgent,
+    nonUrgent: stats.nonUrgent,
+  };
 
   const complaintChartData = [
-    { name: "Total", value: purokData.complaints, color: "#10B981" },
-    { name: "Urgent", value: purokData.urgent, color: "#EF4444" },
-    { name: "Non-Urgent", value: purokData.nonUrgent, color: "#3B82F6" },
+    { name: "Total",      value: purokData.complaints, color: "#10B981" },
+    { name: "Urgent",     value: purokData.urgent,     color: "#EF4444" },
+    { name: "Non-Urgent", value: purokData.nonUrgent,  color: "#3B82F6" },
   ];
 
   return (
@@ -381,16 +338,15 @@ const PurokInfo = ({ purokNumber, onBack, purokStats }) => {
             <FiMapPin className="text-indigo-600" />
             <span className="font-extrabold text-gray-900">{purokData.name}</span>
           </div>
-
           <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900">{purokData.name} Overview</h1>
           <p className="text-gray-600">{purokData.description}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="TOTAL RESIDENTS" value={purokData.residents} tone="blue" />
-          <StatCard title="TOTAL COMPLAINTS" value={purokData.complaints} tone="green" />
-          <StatCard title="URGENT" value={purokData.urgent} tone="red" />
-          <StatCard title="NON-URGENT" value={purokData.nonUrgent} tone="indigo" />
+          <StatCard title="TOTAL RESIDENTS"   value={purokData.residents}  tone="blue"   />
+          <StatCard title="TOTAL COMPLAINTS"  value={purokData.complaints} tone="green"  />
+          <StatCard title="URGENT"            value={purokData.urgent}     tone="red"    />
+          <StatCard title="NON-URGENT"        value={purokData.nonUrgent}  tone="indigo" />
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden">
@@ -400,7 +356,7 @@ const PurokInfo = ({ purokNumber, onBack, purokStats }) => {
               Figure 1: Complaint Breakdown
             </h3>
             <span className="text-xs font-bold text-gray-500 bg-gray-50 border border-gray-200 px-3 py-1 rounded-full">
-              Firebase Only
+              Firestore Live
             </span>
           </div>
 
@@ -428,8 +384,8 @@ const PurokInfo = ({ purokNumber, onBack, purokStats }) => {
 
             <div className="flex flex-wrap justify-center gap-3 mt-5">
               <LegendDot color="bg-green-500" label={`Total: ${purokData.complaints}`} />
-              <LegendDot color="bg-red-500" label={`Urgent: ${purokData.urgent}`} />
-              <LegendDot color="bg-blue-500" label={`Non-Urgent: ${purokData.nonUrgent}`} />
+              <LegendDot color="bg-red-500"   label={`Urgent: ${purokData.urgent}`} />
+              <LegendDot color="bg-blue-500"  label={`Non-Urgent: ${purokData.nonUrgent}`} />
             </div>
           </div>
         </div>
@@ -441,12 +397,11 @@ const PurokInfo = ({ purokNumber, onBack, purokStats }) => {
 const StatCard = ({ title, value, tone = "indigo" }) => {
   const tones = {
     indigo: "border-indigo-200",
-    red: "border-red-200",
-    blue: "border-blue-200",
-    green: "border-green-200",
-    amber: "border-amber-200",
+    red:    "border-red-200",
+    blue:   "border-blue-200",
+    green:  "border-green-200",
+    amber:  "border-amber-200",
   };
-
   return (
     <div className={`bg-white rounded-2xl shadow-lg border-2 ${tones[tone] || tones.indigo} p-6`}>
       <p className="text-xs font-extrabold tracking-wider text-gray-600 mb-1">{title}</p>
@@ -462,13 +417,9 @@ const LegendDot = ({ color, label }) => (
   </div>
 );
 
-/* ===========================
-   DEMO WRAPPER (KEEP IF YOU NEED IT)
-=========================== */
-
+// ── Export wrapper ────────────────────────────────────────────────────────────
 export default function App() {
   const [selectedPurok, setSelectedPurok] = React.useState(null);
-
   return (
     <HoverDevCards
       selectedPurok={selectedPurok}
