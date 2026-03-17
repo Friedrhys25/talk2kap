@@ -1,4 +1,4 @@
-﻿// Notiftable.jsx - Fixed date filter default to show all complaints
+﻿// Notiftable.jsx - Red dot clears after viewing feedback (persisted via localStorage)
 import React, { useState, useEffect, useMemo } from "react";
 import {
   FiAlertTriangle, FiClock, FiSearch, FiX,
@@ -12,12 +12,32 @@ import {
   doc,
   updateDoc,
   getDoc,
-  getDocs,
 } from "firebase/firestore";
 import app from "../../firebaseConfig";
 
 const firestore = getFirestore(app);
 
+// ── Persisted set of complaint keys whose feedback has been seen ──────────────
+const SEEN_KEY = "seenFeedbackKeys";
+
+const loadSeenKeys = () => {
+  try {
+    const raw = localStorage.getItem(SEEN_KEY);
+    return new Set(JSON.parse(raw || "[]"));
+  } catch {
+    return new Set();
+  }
+};
+
+const saveSeenKey = (key) => {
+  try {
+    const current = loadSeenKeys();
+    current.add(key);
+    localStorage.setItem(SEEN_KEY, JSON.stringify([...current]));
+  } catch {}
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 const Notiftable = () => {
   const [filter, setFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -28,15 +48,38 @@ const Notiftable = () => {
   const [previewImage, setPreviewImage] = useState(null);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [feedbackAvailable, setFeedbackAvailable] = useState({});
-  const [loading, setLoading] = useState(true);
 
-  // ✅ Default: show ALL time (empty = no date filter applied)
+  // feedbackAvailable: complaintKey → true (has unseen feedback)
+  const [feedbackAvailable, setFeedbackAvailable] = useState({});
+
+  // seenKeys: Set of keys already dismissed (from localStorage)
+  const [seenKeys] = useState(() => loadSeenKeys());
+
+  const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [dateError, setDateError] = useState("");
 
-  // ── Firestore listener ───────────────────────────────────────────────────────
+  // ── Real-time feedback listener ─────────────────────────────────────────────
+  useEffect(() => {
+    const feedbackRef = collection(firestore, "complaintFeedback");
+
+    const unsubFeedback = onSnapshot(feedbackRef, (snap) => {
+      const map = {};
+      snap.forEach((d) => {
+        const key = d.id;
+        // Only show the dot if feedback exists AND user hasn't seen it yet
+        if (d.data()?.feedbackMessage && !seenKeys.has(key)) {
+          map[key] = true;
+        }
+      });
+      setFeedbackAvailable(map);
+    });
+
+    return () => unsubFeedback();
+  }, []);
+
+  // ── Complaints listener ─────────────────────────────────────────────────────
   useEffect(() => {
     const usersRef = collection(firestore, "users");
     const innerUnsubs = [];
@@ -96,14 +139,6 @@ const Notiftable = () => {
 
           innerUnsubs.push(unsubComplaints);
         });
-
-        getDocs(collection(firestore, "complaintFeedback"))
-          .then((snap) => {
-            const map = {};
-            snap.forEach((d) => { if (d.data()?.feedbackMessage) map[d.id] = true; });
-            setFeedbackAvailable(map);
-          })
-          .catch(console.error);
       },
       (err) => {
         console.error("Firestore error:", err);
@@ -117,12 +152,11 @@ const Notiftable = () => {
     };
   }, []);
 
-  // ── Date validation ──────────────────────────────────────────────────────────
+  // ── Date validation ─────────────────────────────────────────────────────────
   const getDateBounds = () => {
-    // ✅ If either date is empty, return null = no date filtering
     if (!startDate || !endDate) return null;
     const start = new Date(`${startDate}T00:00:00`);
-    const end = new Date(`${endDate}T23:59:59`);
+    const end   = new Date(`${endDate}T23:59:59`);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
     return { start, end };
   };
@@ -135,7 +169,7 @@ const Notiftable = () => {
     setDateError("");
   }, [startDate, endDate]);
 
-  // ── Derived data ─────────────────────────────────────────────────────────────
+  // ── Derived data ────────────────────────────────────────────────────────────
   const issueTypes = useMemo(() => {
     const set = new Set();
     notifications.forEach((n) => { const t = (n.type || "").trim(); if (t && t !== "—") set.add(t); });
@@ -158,7 +192,6 @@ const Notiftable = () => {
       const term = searchTerm.toLowerCase();
       if (term && !n.name?.toLowerCase().includes(term) && !n.type?.toLowerCase().includes(term) &&
           !n.message?.toLowerCase().includes(term) && !n.incidentPurok?.toLowerCase().includes(term)) return false;
-      // ✅ Only apply date filter if both dates are set
       if (!dateError && bounds) {
         if (n._rawTimestamp < bounds.start || n._rawTimestamp > bounds.end) return false;
       }
@@ -167,36 +200,36 @@ const Notiftable = () => {
   }, [notifications, filter, statusFilter, issueFilter, searchTerm, startDate, endDate, dateError]);
 
   const stats = useMemo(() => ({
-    total: filteredNotifications.length,
-    pending: filteredNotifications.filter((n) => n.status === "pending").length,
+    total:        filteredNotifications.length,
+    pending:      filteredNotifications.filter((n) => n.status === "pending").length,
     "in-progress": filteredNotifications.filter((n) =>
       n.status === "in-progress" || n.status === "in progress"
     ).length,
-    resolved: filteredNotifications.filter((n) => n.status === "resolved").length,
+    resolved:     filteredNotifications.filter((n) => n.status === "resolved").length,
   }), [filteredNotifications]);
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // ── Helpers ─────────────────────────────────────────────────────────────────
   const getUrgencyDisplay = (label) =>
     label === "urgent"
-      ? { icon: <FiAlertTriangle className="text-red-600" />, text: "Urgent", pill: "bg-red-100 text-red-800 ring-1 ring-red-200" }
-      : { icon: <FiClock className="text-blue-600" />, text: "Non-Urgent", pill: "bg-blue-100 text-blue-800 ring-1 ring-blue-200" };
+      ? { icon: <FiAlertTriangle className="text-red-600" />, text: "Urgent",     pill: "bg-red-100 text-red-800 ring-1 ring-red-200"   }
+      : { icon: <FiClock         className="text-blue-600" />, text: "Non-Urgent", pill: "bg-blue-100 text-blue-800 ring-1 ring-blue-200" };
 
   const getIssueColor = (type) => ({
-    medical: "bg-red-100 text-red-800 ring-1 ring-red-200",
-    fire: "bg-orange-100 text-orange-800 ring-1 ring-orange-200",
-    noise: "bg-purple-100 text-purple-800 ring-1 ring-purple-200",
-    waste: "bg-green-100 text-green-800 ring-1 ring-green-200",
+    medical:        "bg-red-100 text-red-800 ring-1 ring-red-200",
+    fire:           "bg-orange-100 text-orange-800 ring-1 ring-orange-200",
+    noise:          "bg-purple-100 text-purple-800 ring-1 ring-purple-200",
+    waste:          "bg-green-100 text-green-800 ring-1 ring-green-200",
     infrastructure: "bg-gray-100 text-gray-800 ring-1 ring-gray-200",
   })[(type || "").toLowerCase()] || "bg-gray-100 text-gray-800 ring-1 ring-gray-200";
 
   const getStatusDisplay = (status) => ({
-    pending: { pill: "bg-yellow-100 text-yellow-900 ring-1 ring-yellow-200", text: "Pending" },
-    "in-progress": { pill: "bg-blue-100 text-blue-900 ring-1 ring-blue-200", text: "In Progress" },
-    "in progress": { pill: "bg-blue-100 text-blue-900 ring-1 ring-blue-200", text: "In Progress" },
-    resolved: { pill: "bg-green-100 text-green-900 ring-1 ring-green-200", text: "Resolved" },
+    pending:      { pill: "bg-yellow-100 text-yellow-900 ring-1 ring-yellow-200", text: "Pending"     },
+    "in-progress":{ pill: "bg-blue-100 text-blue-900 ring-1 ring-blue-200",       text: "In Progress" },
+    "in progress":{ pill: "bg-blue-100 text-blue-900 ring-1 ring-blue-200",       text: "In Progress" },
+    resolved:     { pill: "bg-green-100 text-green-900 ring-1 ring-green-200",    text: "Resolved"    },
   })[(status || "").toLowerCase()] || { pill: "bg-yellow-100 text-yellow-900 ring-1 ring-yellow-200", text: "Pending" };
 
-  // ── Update status ────────────────────────────────────────────────────────────
+  // ── Update complaint status ─────────────────────────────────────────────────
   const updateComplaintStatus = async (complaint, newStatus) => {
     if (!complaint?.userId || !complaint?.complaintKey) return;
     try {
@@ -214,9 +247,31 @@ const Notiftable = () => {
     }
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── View feedback — clears the red dot permanently ──────────────────────────
+  const handleViewFeedback = async (key) => {
+    if (!key) return;
+    try {
+      const fbDoc = await getDoc(doc(firestore, "complaintFeedback", key));
+      setFeedbackMessage(fbDoc.data()?.feedbackMessage || "No feedback yet.");
+    } catch {
+      setFeedbackMessage("Failed to load feedback.");
+    }
+
+    // ✅ Mark as seen — removes dot immediately and persists across reloads
+    saveSeenKey(key);
+    seenKeys.add(key);
+    setFeedbackAvailable((prev) => {
+      const updated = { ...prev };
+      delete updated[key];
+      return updated;
+    });
+
+    setShowFeedbackModal(true);
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
+    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50">
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -233,10 +288,10 @@ const Notiftable = () => {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard label="Total" value={stats.total} tone="indigo" />
-          <StatCard label="Pending" value={stats.pending} tone="yellow" />
-          <StatCard label="In Progress" value={stats["in-progress"]} tone="blue" />
-          <StatCard label="Resolved" value={stats.resolved} tone="green" />
+          <StatCard label="Total"       value={stats.total}          tone="indigo" />
+          <StatCard label="Pending"     value={stats.pending}        tone="yellow" />
+          <StatCard label="In Progress" value={stats["in-progress"]} tone="blue"   />
+          <StatCard label="Resolved"    value={stats.resolved}       tone="green"  />
         </div>
 
         {/* Filters */}
@@ -259,7 +314,7 @@ const Notiftable = () => {
                 </div>
               </div>
 
-              {/* Date Range — optional, empty = show all */}
+              {/* Date Range */}
               <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
                 {[["From", startDate, setStartDate], ["To", endDate, setEndDate]].map(([lbl, val, setter]) => (
                   <div key={lbl} className="flex flex-col w-full sm:w-[200px]">
@@ -272,10 +327,8 @@ const Notiftable = () => {
                 ))}
                 {(startDate || endDate) && (
                   <div className="flex flex-col justify-end">
-                    <button
-                      onClick={() => { setStartDate(""); setEndDate(""); }}
-                      className="px-4 py-3 text-sm font-bold text-gray-500 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition"
-                    >
+                    <button onClick={() => { setStartDate(""); setEndDate(""); }}
+                      className="px-4 py-3 text-sm font-bold text-gray-500 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition">
                       Clear dates
                     </button>
                   </div>
@@ -314,9 +367,9 @@ const Notiftable = () => {
               <span className="text-sm font-bold text-gray-700">Status:</span>
               {["all", "pending", "in-progress", "resolved"].map((s) => {
                 const active = statusFilter === s;
-                const style = s === "pending" ? "bg-yellow-600 text-white"
+                const style = s === "pending"     ? "bg-yellow-600 text-white"
                   : s === "in-progress" ? "bg-blue-600 text-white"
-                  : s === "resolved" ? "bg-green-600 text-white"
+                  : s === "resolved"    ? "bg-green-600 text-white"
                   : "bg-gray-900 text-white";
                 return (
                   <button key={s} onClick={() => setStatusFilter(s)}
@@ -342,7 +395,7 @@ const Notiftable = () => {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] text-left">
                 <thead>
-                  <tr className="bg-linear-to-r from-slate-50 via-white to-slate-50 border-b border-gray-200">
+                  <tr className="bg-gradient-to-r from-slate-50 via-white to-slate-50 border-b border-gray-200">
                     {["Urgency", "Purok", "Complainant", "Issue Type", "Description", "Date", "Status"].map((h) => (
                       <th key={h} className="px-6 py-4 text-xs font-extrabold tracking-wider text-gray-600 uppercase">{h}</th>
                     ))}
@@ -351,7 +404,7 @@ const Notiftable = () => {
                 <tbody>
                   {filteredNotifications.map((n, idx) => {
                     const urgency = getUrgencyDisplay(n.label);
-                    const status = getStatusDisplay(n.status);
+                    const status  = getStatusDisplay(n.status);
                     return (
                       <tr key={n.complaintKey}
                         className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50/70"} border-b border-gray-100 hover:bg-indigo-50/60 transition cursor-pointer`}
@@ -365,6 +418,7 @@ const Notiftable = () => {
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
                             {n.name}
+                            {/* ✅ Red dot only shows if feedback is unseen */}
                             {n.status === "resolved" && feedbackAvailable[n.complaintKey] && (
                               <span className="relative flex items-center justify-center">
                                 <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75" />
@@ -388,9 +442,7 @@ const Notiftable = () => {
                   })}
                   {filteredNotifications.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="text-center py-10 text-gray-500 text-sm font-bold">
-                        No complaints found
-                      </td>
+                      <td colSpan={7} className="text-center py-10 text-gray-500 text-sm font-bold">No complaints found</td>
                     </tr>
                   )}
                 </tbody>
@@ -405,7 +457,7 @@ const Notiftable = () => {
             onClick={() => setSelectedComplaint(null)}>
             <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[96vh] shadow-2xl overflow-hidden flex flex-col"
               onClick={(e) => e.stopPropagation()}>
-              <div className="relative bg-linear-to-r from-indigo-600 via-purple-600 to-pink-600 p-6 text-white">
+              <div className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-6 text-white">
                 <button className="absolute top-4 right-4 text-white/90 hover:bg-white/15 rounded-full p-2 transition"
                   onClick={() => setSelectedComplaint(null)}><FiX size={22} /></button>
                 <h2 className="text-2xl font-extrabold">Complaint Details</h2>
@@ -429,9 +481,9 @@ const Notiftable = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <InfoRow icon={<FiUser size={18} />} title="Complainant" value={selectedComplaint.name} tone="indigo" />
-                  <InfoRow icon={<FiMapPin size={18} />} title="Purok" value={`Purok ${selectedComplaint.incidentPurok}`} tone="green" />
-                  <InfoRow icon={<FiHome size={18} />} title="Incident Location" value={selectedComplaint.incidentLocation} tone="amber" />
+                  <InfoRow icon={<FiUser size={18} />}     title="Complainant"       value={selectedComplaint.name}            tone="indigo" />
+                  <InfoRow icon={<FiMapPin size={18} />}   title="Purok"             value={`Purok ${selectedComplaint.incidentPurok}`} tone="green" />
+                  <InfoRow icon={<FiHome size={18} />}     title="Incident Location" value={selectedComplaint.incidentLocation} tone="amber"  />
                   <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
                     <div className="flex items-start gap-3">
                       <div className="p-2.5 rounded-xl bg-purple-100 text-purple-700"><FiFileText size={18} /></div>
@@ -460,21 +512,11 @@ const Notiftable = () => {
                   <p className="text-sm font-semibold text-gray-800 leading-relaxed whitespace-pre-line">{selectedComplaint.message}</p>
                 </div>
 
+                {/* ✅ View Feedback button — clears red dot on click */}
                 {selectedComplaint.status === "resolved" && (
                   <button
                     className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition"
-                    onClick={async () => {
-                      const key = selectedComplaint?.complaintKey;
-                      if (!key) return;
-                      try {
-                        const fbDoc = await getDoc(doc(firestore, "complaintFeedback", key));
-                        setFeedbackMessage(fbDoc.data()?.feedbackMessage || "No feedback yet.");
-                      } catch {
-                        setFeedbackMessage("Failed to load feedback.");
-                      }
-                      setShowFeedbackModal(true);
-                      setFeedbackAvailable((prev) => { const u = { ...prev }; delete u[key]; return u; });
-                    }}>
+                    onClick={() => handleViewFeedback(selectedComplaint.complaintKey)}>
                     View Feedback
                   </button>
                 )}
@@ -506,11 +548,11 @@ const Notiftable = () => {
 
         {/* Feedback Modal */}
         {showFeedbackModal && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-9999 backdrop-blur-sm p-4"
+          <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[9999] backdrop-blur-sm p-4"
             onClick={() => setShowFeedbackModal(false)}>
             <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden"
               onClick={(e) => e.stopPropagation()}>
-              <div className="px-6 py-5 border-b flex items-center justify-between bg-linear-to-r from-indigo-50 to-white">
+              <div className="px-6 py-5 border-b flex items-center justify-between bg-gradient-to-r from-indigo-50 to-white">
                 <div className="flex items-center gap-3">
                   <span className="bg-indigo-600 text-white rounded-xl p-2.5"><FiCheckCircle size={20} /></span>
                   <h3 className="text-xl font-extrabold text-indigo-700">Feedback</h3>
@@ -527,7 +569,7 @@ const Notiftable = () => {
 
         {/* Image Preview */}
         {previewImage && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-9999 p-4"
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-[9999] p-4"
             onClick={() => setPreviewImage(null)}>
             <img src={previewImage} alt="Preview" className="max-w-[92%] max-h-[92%] rounded-2xl shadow-2xl border border-white/20" />
             <button className="absolute top-6 right-6 text-white text-4xl font-extrabold" onClick={() => setPreviewImage(null)}>✖</button>
@@ -540,7 +582,7 @@ const Notiftable = () => {
 
 export default Notiftable;
 
-/* ── Helpers ──────────────────────────────────────────────────────────────── */
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
 const StatCard = ({ label, value, tone }) => {
   const t = {
     indigo: { ring: "ring-indigo-200", bg: "from-indigo-50 to-white", dot: "bg-indigo-600", text: "text-indigo-700" },
@@ -550,7 +592,7 @@ const StatCard = ({ label, value, tone }) => {
   }[tone] || {};
   return (
     <div className="rounded-2xl bg-white shadow-xl border border-gray-200 overflow-hidden">
-      <div className={`p-5 bg-linear-to-b ${t.bg}`}>
+      <div className={`p-5 bg-gradient-to-b ${t.bg}`}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className={`text-xs font-extrabold uppercase tracking-wider ${t.text}`}>{label}</p>
@@ -565,8 +607,8 @@ const StatCard = ({ label, value, tone }) => {
 
 const InfoRow = ({ icon, title, value, tone }) => {
   const chip = {
-    indigo: "bg-indigo-100 text-indigo-700", green: "bg-green-100 text-green-700",
-    amber: "bg-amber-100 text-amber-700",    orange: "bg-orange-100 text-orange-700",
+    indigo: "bg-indigo-100 text-indigo-700", green:  "bg-green-100 text-green-700",
+    amber:  "bg-amber-100 text-amber-700",   orange: "bg-orange-100 text-orange-700",
   }[tone] || "bg-indigo-100 text-indigo-700";
   return (
     <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
