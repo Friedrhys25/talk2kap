@@ -684,7 +684,7 @@ const Validations = () => {
 
         {/* Fullscreen image preview */}
         {previewImage && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-[9999]"
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-9999"
             onClick={() => setPreviewImage(null)}>
             <img src={previewImage} alt="Preview" className="max-w-[90%] max-h-[90%] rounded-lg shadow-2xl" />
             <button className="absolute top-6 right-6 text-white text-3xl font-bold hover:scale-110 transition-transform"

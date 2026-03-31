@@ -791,7 +791,7 @@ const Notiftable = () => {
 
         {/* ── Assign Tanod Modal ───────────────────────────────────────────── */}
         {showAssignModal && (
-          <div className="fixed inset-0 z-[60] p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
+          <div className="fixed inset-0 z-60 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
             onClick={() => setShowAssignModal(false)}>
             <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden"
               onClick={(e) => e.stopPropagation()}>
@@ -882,7 +882,7 @@ const Notiftable = () => {
 
         {/* ── Resolve Feedback Modal ───────────────────────────────────────── */}
         {showResolveFeedback && resolvingComplaint && (
-          <div className="fixed inset-0 z-[60] p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
+          <div className="fixed inset-0 z-60 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
             onClick={() => setShowResolveFeedback(false)}>
             <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
               onClick={(e) => e.stopPropagation()}>
@@ -962,7 +962,7 @@ const Notiftable = () => {
 
         {/* ── View Feedback Modal ───────────────────────────────────────────── */}
         {showViewFeedbackModal && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[70] backdrop-blur-sm p-4"
+          <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-70 backdrop-blur-sm p-4"
             onClick={() => setShowViewFeedbackModal(false)}>
             <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden max-h-[90vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}>
@@ -1045,7 +1045,7 @@ const Notiftable = () => {
 
         {/* ── Image Preview ─────────────────────────────────────────────────── */}
         {previewImage && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-[80] p-4"
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-80 p-4"
             onClick={() => setPreviewImage(null)}>
             <img src={previewImage} alt="Preview" className="max-w-[92%] max-h-[92%] rounded-2xl shadow-2xl border border-white/20" />
             <button className="absolute top-6 right-6 text-white text-4xl font-extrabold" onClick={() => setPreviewImage(null)}>✖</button>
