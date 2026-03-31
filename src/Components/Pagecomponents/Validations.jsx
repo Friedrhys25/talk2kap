@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   FiUser, FiPhone, FiMapPin, FiHome,
-  FiX, FiSearch, FiCheck, FiSlash, FiTrash2,
+  FiX, FiSearch, FiCheck, FiSlash, FiTrash2, FiShield, FiSun, FiMoon,
 } from "react-icons/fi";
 import {
   getFirestore,
@@ -46,6 +46,10 @@ const Validations = () => {
   const [previewImage, setPreviewImage] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Tanod-specific state
+  const [tanodSearch, setTanodSearch] = useState("");
+  const [tanodPurokFilter, setTanodPurokFilter] = useState("All Purok");
+
   // ── Firestore listener ───────────────────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -82,11 +86,15 @@ const Validations = () => {
     return () => unsubscribe();
   }, []);
 
+  // ── Separate residents and tanods ────────────────────────────────────────────
+  const residents = useMemo(() => users.filter((u) => !u.isEmployee), [users]);
+  const tanods = useMemo(() => users.filter((u) => u.isEmployee === true), [users]);
+
   // ── Purok options ────────────────────────────────────────────────────────────
   const purokOptions = useMemo(() => {
     const base = ["All Purok", "Purok 1", "Purok 2", "Purok 3", "Purok 4", "Purok 5"];
     const unique = new Set();
-    users.forEach((u) => {
+    residents.forEach((u) => {
       const p = u.purok;
       if (p != null && String(p).trim() !== "") unique.add(String(p).trim());
     });
@@ -102,20 +110,49 @@ const Validations = () => {
         return pa.localeCompare(pb);
       });
     return [...base, ...extras];
-  }, [users]);
+  }, [residents]);
 
-  // ── Stats ────────────────────────────────────────────────────────────────────
+  const tanodPurokOptions = useMemo(() => {
+    const base = ["All Purok", "Purok 1", "Purok 2", "Purok 3", "Purok 4", "Purok 5"];
+    const unique = new Set();
+    tanods.forEach((u) => {
+      const p = u.purok;
+      if (p != null && String(p).trim() !== "") unique.add(String(p).trim());
+    });
+    const baseSet = new Set(base);
+    const extras = Array.from(unique)
+      .map((p) => `Purok ${p}`)
+      .filter((l) => !baseSet.has(l))
+      .sort((a, b) => {
+        const pa = a.replace(/^Purok\s+/i, "").trim();
+        const pb = b.replace(/^Purok\s+/i, "").trim();
+        const na = Number(pa), nb = Number(pb);
+        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        return pa.localeCompare(pb);
+      });
+    return [...base, ...extras];
+  }, [tanods]);
+
+  // ── Stats (residents only) ───────────────────────────────────────────────────
   const stats = useMemo(() => ({
-    total:    users.length,
-    pending:  users.filter((u) => u.idstatus === "pending").length,
-    verified: users.filter((u) => u.idstatus === "verified").length,
-    declined: users.filter((u) => u.idstatus === "declined").length,
-  }), [users]);
+    total:    residents.length,
+    pending:  residents.filter((u) => u.idstatus === "pending").length,
+    verified: residents.filter((u) => u.idstatus === "verified").length,
+    declined: residents.filter((u) => u.idstatus === "declined").length,
+  }), [residents]);
 
-  // ── Filtered list ────────────────────────────────────────────────────────────
+  // ── Tanod stats ──────────────────────────────────────────────────────────────
+  const tanodStats = useMemo(() => ({
+    total:    tanods.length,
+    pending:  tanods.filter((u) => u.idstatus === "pending").length,
+    verified: tanods.filter((u) => u.idstatus === "verified").length,
+    declined: tanods.filter((u) => u.idstatus === "declined").length,
+  }), [tanods]);
+
+  // ── Filtered residents ───────────────────────────────────────────────────────
   const filteredUsers = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return users.filter((user) => {
+    return residents.filter((user) => {
       const matchesFilter = filter === "all" || user.idstatus === filter;
       const matchesSearch =
         (user.complainant || "").toLowerCase().includes(term) ||
@@ -128,7 +165,46 @@ const Validations = () => {
           : `Purok ${String(user.purok ?? "").trim()}` === purokFilter;
       return matchesFilter && matchesSearch && matchesPurok;
     });
-  }, [users, filter, searchTerm, purokFilter]);
+  }, [residents, filter, searchTerm, purokFilter]);
+
+  // ── Filtered tanods ──────────────────────────────────────────────────────────
+  const filteredTanods = useMemo(() => {
+    const term = tanodSearch.toLowerCase();
+    return tanods.filter((user) => {
+      const matchesSearch =
+        (user.complainant || "").toLowerCase().includes(term) ||
+        String(user.number || "").toLowerCase().includes(term) ||
+        String(user.purok || "").toLowerCase().includes(term) ||
+        String(user.address || "").toLowerCase().includes(term) ||
+        String(user.employeeRole || "").toLowerCase().includes(term) ||
+        String(user.email || "").toLowerCase().includes(term);
+      const matchesPurok =
+        tanodPurokFilter === "All Purok"
+          ? true
+          : `Purok ${String(user.purok ?? "").trim()}` === tanodPurokFilter;
+      return matchesSearch && matchesPurok;
+    });
+  }, [tanods, tanodSearch, tanodPurokFilter]);
+
+  // ── Shift helpers ────────────────────────────────────────────────────────────
+  const shiftChip = (shift) => {
+    if (!shift || shift === "none") return "bg-gray-100 text-gray-500 border-gray-200";
+    if (shift === "morning") return "bg-amber-100 text-amber-800 border-amber-200";
+    if (shift === "evening") return "bg-indigo-100 text-indigo-800 border-indigo-200";
+    return "bg-gray-100 text-gray-500 border-gray-200";
+  };
+
+  const shiftLabel = (shift) => {
+    if (shift === "morning") return "Morning";
+    if (shift === "evening") return "Evening";
+    return "No Shift";
+  };
+
+  const ShiftIcon = ({ shift, size = 13 }) => {
+    if (shift === "morning") return <FiSun size={size} />;
+    if (shift === "evening") return <FiMoon size={size} />;
+    return null;
+  };
 
   // ── Update / Delete ──────────────────────────────────────────────────────────
   const updateStatus = async (id, newStatus) => {
@@ -156,6 +232,18 @@ const Validations = () => {
     }
   };
 
+  const updateShift = async (id, newShift) => {
+    try {
+      await updateDoc(doc(firestore, "users", id), { shift: newShift });
+      setUsers((prev) => prev.map((u) => u.id === id ? { ...u, shift: newShift } : u));
+      if (selectedUser?.id === id)
+        setSelectedUser((prev) => prev ? { ...prev, shift: newShift } : prev);
+    } catch (err) {
+      console.error("Error updating shift:", err);
+      alert("Failed to update shift.");
+    }
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
@@ -172,7 +260,17 @@ const Validations = () => {
         aria-hidden="true"
       />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 py-8 space-y-6">
+      <div className="relative z-10 max-w-7xl mx-auto px-6 py-8 space-y-10">
+
+        {/* ════════════════════════════════════════════════════════════════════
+            SECTION 1: RESIDENTS
+        ════════════════════════════════════════════════════════════════════ */}
+
+        {/* Section Label */}
+        <div className="flex items-center gap-3">
+          <FiUser className="text-indigo-600" size={22} />
+          <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight">Resident Validations</h1>
+        </div>
 
         {/* Search + Purok */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -220,7 +318,7 @@ const Validations = () => {
             ))}
           </div>
 
-          {/* Filter buttons — "verified" instead of "approved" */}
+          {/* Filter buttons */}
           <div className="lg:col-span-4">
             <div className="rounded-2xl border border-white/60 bg-white/75 backdrop-blur shadow-lg p-4">
               <p className="text-xs font-extrabold uppercase tracking-wider text-gray-600 mb-3">Filter</p>
@@ -248,7 +346,7 @@ const Validations = () => {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Residents Table */}
         <div className="rounded-2xl border border-white/60 bg-white/80 backdrop-blur shadow-2xl overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-16">
@@ -311,7 +409,162 @@ const Validations = () => {
           )}
         </div>
 
-        {/* Detail Modal */}
+        {/* ════════════════════════════════════════════════════════════════════
+            SECTION 2: TANOD / EMPLOYEES
+        ════════════════════════════════════════════════════════════════════ */}
+
+        {/* Divider */}
+        <div className="border-t-2 border-dashed border-indigo-200 pt-4" />
+
+        {/* Section Label */}
+        <div className="flex items-center gap-3">
+          <FiShield className="text-indigo-600" size={22} />
+          <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight">Tanod / Employee Validations</h1>
+          <span className="ml-2 px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-100 text-indigo-700 border border-indigo-200">
+            {tanods.length} Tanod{tanods.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+
+        {/* Tanod Search + Purok */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div />
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+            <div className="relative w-full lg:w-[420px]">
+              <FiSearch className="absolute left-3 top-1/2 text-gray-400 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search name, contact, purok, role, email..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/80 backdrop-blur shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                value={tanodSearch}
+                onChange={(e) => setTanodSearch(e.target.value)}
+              />
+            </div>
+            <div className="w-full sm:w-56">
+              <select
+                value={tanodPurokFilter}
+                onChange={(e) => setTanodPurokFilter(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white/80 backdrop-blur shadow-sm font-bold text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                {tanodPurokOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Tanod Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          {[
+            { key: "total",    label: "Total Tanods", value: tanodStats.total,    color: "text-gray-900"    },
+            { key: "pending",  label: "Pending",      value: tanodStats.pending,  color: "text-amber-700"   },
+            { key: "verified", label: "Verified",     value: tanodStats.verified, color: "text-emerald-700" },
+            { key: "declined", label: "Declined",     value: tanodStats.declined, color: "text-rose-700"    },
+          ].map(({ key, label, value, color }) => (
+            <div key={key} className="relative overflow-hidden rounded-2xl border border-white/60 bg-white/75 backdrop-blur shadow-lg">
+              <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-indigo-500/10 blur-2xl" />
+              <div className="relative p-4">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-gray-600">{label}</p>
+                <p className={`mt-1 text-3xl font-extrabold tracking-tight ${color}`}>{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tanod Table */}
+        <div className="rounded-2xl border border-indigo-100 bg-white/80 backdrop-blur shadow-2xl overflow-hidden">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mr-3" />
+              <span className="text-gray-500 font-semibold">Loading tanods...</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px] text-left">
+                <thead className="bg-indigo-50 sticky top-0 z-10">
+                  <tr className="border-b border-indigo-100">
+                    {["Name", "Email", "Contact", "Purok", "Address", "Role", "Shift", "ID Status", "Verification", "Actions"].map((h) => (
+                      <th key={h} className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-indigo-700 ${h === "Actions" ? "text-right" : ""}`}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTanods.map((user, idx) => (
+                    <tr
+                      key={user.id}
+                      className={`border-b border-indigo-50 transition ${idx % 2 === 0 ? "bg-white" : "bg-indigo-50/30"} hover:bg-indigo-50/70 cursor-pointer`}
+                      onClick={() => setSelectedUser(user)}
+                    >
+                      <td className="px-6 py-4 font-bold text-gray-900">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-100 text-indigo-600">
+                            <FiShield size={13} />
+                          </span>
+                          {user.complainant || "—"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{user.email || "—"}</td>
+                      <td className="px-6 py-4 text-sm font-semibold text-gray-800">{user.number || "—"}</td>
+                      <td className="px-6 py-4 text-sm font-semibold text-gray-800">Purok {user.purok || "—"}</td>
+                      <td className="px-6 py-4 max-w-xs truncate text-sm text-gray-700" title={user.address || ""}>{user.address || "—"}</td>
+                      <td className="px-6 py-4">
+                        {user.employeeRole ? (
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border bg-indigo-100 text-indigo-700 border-indigo-200 capitalize">
+                            {user.employeeRole}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={user.shift || "none"}
+                          onChange={(e) => updateShift(user.id, e.target.value)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 transition ${shiftChip(user.shift)}`}
+                        >
+                          <option value="none">No Shift</option>
+                          <option value="morning">☀️ Morning</option>
+                          <option value="evening">🌙 Evening</option>
+                        </select>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border ${statusChip(user.idstatus)}`}>
+                          {statusLabel(user.idstatus)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {user.idImage ? (
+                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-emerald-50 text-emerald-700 border-emerald-200">
+                            <FiCheck /> Sent
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-slate-100 text-slate-700 border-slate-200">
+                            <FiSlash /> None
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => deleteUser(user.id)}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-extrabold border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition"
+                        >
+                          <FiTrash2 /> Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredTanods.length === 0 && (
+                    <tr>
+                      <td colSpan={10} className="text-center py-10 text-gray-500 font-semibold">No tanods found</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* ── Detail Modal (shared for residents & tanods) ──────────────────── */}
         {selectedUser && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/35 backdrop-blur-sm z-50 p-4"
             onClick={() => setSelectedUser(null)}>
@@ -324,7 +577,16 @@ const Validations = () => {
                 <button className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full p-2 transition-all"
                   onClick={() => setSelectedUser(null)}><FiX size={22} /></button>
                 <div className="relative">
-                  <h2 className="text-xl md:text-2xl font-extrabold">User Details</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl md:text-2xl font-extrabold">
+                      {selectedUser.isEmployee ? "Tanod Details" : "User Details"}
+                    </h2>
+                    {selectedUser.isEmployee && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-white/20 border border-white/30 ml-1">
+                        <FiShield size={12} /> Tanod
+                      </span>
+                    )}
+                  </div>
                   <p className="text-indigo-100 text-xs font-semibold mt-1">ID: {selectedUser.id}</p>
                 </div>
               </div>
@@ -341,8 +603,37 @@ const Validations = () => {
                   <div className="space-y-4">
                     <InfoRow label="Name"    value={selectedUser.complainant} icon={<FiUser  className="text-indigo-600"  size={18} />} tone="indigo"  />
                     <InfoRow label="Contact" value={selectedUser.number}      icon={<FiPhone className="text-emerald-600" size={18} />} tone="emerald" />
-                    <InfoRow label="Purok"   value={selectedUser.purok}       icon={<FiMapPin className="text-amber-600" size={18} />} tone="amber"   />
+                    <InfoRow label="Purok"   value={selectedUser.purok ? `Purok ${selectedUser.purok}` : "—"} icon={<FiMapPin className="text-amber-600" size={18} />} tone="amber"   />
                     <InfoRow label="Address" value={selectedUser.address}     icon={<FiHome  className="text-purple-600"  size={18} />} tone="purple"  />
+                    {selectedUser.isEmployee && (
+                      <InfoRow
+                        label="Role"
+                        value={selectedUser.employeeRole}
+                        icon={<FiShield className="text-indigo-600" size={18} />}
+                        tone="indigo"
+                      />
+                    )}
+                    {selectedUser.isEmployee && (
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-amber-100">
+                          {selectedUser.shift === "evening"
+                            ? <FiMoon className="text-indigo-600" size={18} />
+                            : <FiSun className="text-amber-600" size={18} />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] text-gray-500 font-extrabold uppercase tracking-wider mb-1">Shift</p>
+                          <select
+                            value={selectedUser.shift || "none"}
+                            onChange={(e) => updateShift(selectedUser.id, e.target.value)}
+                            className={`w-full px-3 py-2 rounded-xl text-sm font-extrabold border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 transition ${shiftChip(selectedUser.shift)}`}
+                          >
+                            <option value="none">No Shift</option>
+                            <option value="morning">☀️ Morning Shift</option>
+                            <option value="evening">🌙 Evening Shift</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -394,7 +685,7 @@ const Validations = () => {
 
         {/* Fullscreen image preview */}
         {previewImage && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-9999"
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-[9999]"
             onClick={() => setPreviewImage(null)}>
             <img src={previewImage} alt="Preview" className="max-w-[90%] max-h-[90%] rounded-lg shadow-2xl" />
             <button className="absolute top-6 right-6 text-white text-3xl font-bold hover:scale-110 transition-transform"

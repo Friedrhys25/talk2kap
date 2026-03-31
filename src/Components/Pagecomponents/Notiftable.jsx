@@ -77,12 +77,12 @@ const TanodWorkloadModal = ({ tanod, allComplaints, onClose }) => {
   })[(s||"").toLowerCase()] || s;
 
   return (
-    <div className="fixed inset-0 z-[80] p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
+    <div className="fixed inset-0 z-80 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
       onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}>
 
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between shrink-0">
+        <div className="bg-linear-to-r from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 text-white">
             <div className="bg-white/20 p-2.5 rounded-xl"><FiShield size={20} /></div>
             <div>
@@ -567,7 +567,7 @@ const Notiftable = () => {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50">
+    <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       <div className="fixed inset-0 pointer-events-none z-0"
         style={{ backgroundImage:'url("/src/assets/sanroquelogo.png")', backgroundPosition:"right 35% center",
           backgroundRepeat:"no-repeat", backgroundSize:"49%", opacity:0.15 }} aria-hidden="true" />
@@ -661,7 +661,7 @@ const Notiftable = () => {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1080px] text-left">
                 <thead>
-                  <tr className="bg-gradient-to-r from-slate-50 via-white to-slate-50 border-b border-gray-200">
+                  <tr className="bg-linear-to-r from-slate-50 via-white to-slate-50 border-b border-gray-200">
                     {["Urgency","Purok","Complainant","Issue Type","Description","Assigned Tanod","Date","Status"].map((h) => (
                       <th key={h} className="px-5 py-4 text-xs font-extrabold tracking-wider text-gray-600 uppercase">{h}</th>
                     ))}
@@ -723,7 +723,7 @@ const Notiftable = () => {
             onClick={() => setSelectedComplaint(null)}>
             <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[96vh] shadow-2xl overflow-hidden flex flex-col"
               onClick={(e) => e.stopPropagation()}>
-              <div className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-6 text-white">
+              <div className="relative bg-linear-to-r from-indigo-600 via-purple-600 to-pink-600 p-6 text-white">
                 <button className="absolute top-4 right-4 text-white/90 hover:bg-white/15 rounded-full p-2 transition"
                   onClick={() => setSelectedComplaint(null)}><FiX size={22} /></button>
                 <h2 className="text-2xl font-extrabold">Complaint Details</h2>
@@ -795,7 +795,7 @@ const Notiftable = () => {
             onClick={() => setShowAssignModal(false)}>
             <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden"
               onClick={(e) => e.stopPropagation()}>
-              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between">
+              <div className="bg-linear-to-r from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between">
                 <div className="flex items-center gap-3 text-white">
                   <div className="bg-white/20 p-2.5 rounded-xl"><FiShield size={20} /></div>
                   <div>
@@ -886,7 +886,7 @@ const Notiftable = () => {
             onClick={() => setShowResolveFeedback(false)}>
             <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
               onClick={(e) => e.stopPropagation()}>
-              <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-5 flex items-center justify-between shrink-0">
+              <div className="bg-linear-to-r from-green-600 to-emerald-600 px-6 py-5 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-3 text-white">
                   <div className="bg-white/20 p-2.5 rounded-xl"><FiMessageSquare size={20} /></div>
                   <div>
@@ -966,7 +966,7 @@ const Notiftable = () => {
             onClick={() => setShowViewFeedbackModal(false)}>
             <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden max-h-[90vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}>
-              <div className="px-6 py-5 border-b flex items-center justify-between bg-gradient-to-r from-indigo-50 to-white">
+              <div className="px-6 py-5 border-b flex items-center justify-between bg-linear-to-r from-indigo-50 to-white">
                 <div className="flex items-center gap-3">
                   <span className="bg-indigo-600 text-white rounded-xl p-2.5"><FiStar size={20} /></span>
                   <h3 className="text-xl font-extrabold text-indigo-700">Submitted Feedback</h3>
@@ -1069,7 +1069,7 @@ const StatCard = ({ label, value, tone }) => {
   }[tone] || {};
   return (
     <div className="rounded-2xl bg-white shadow-xl border border-gray-200 overflow-hidden">
-      <div className={`p-5 bg-gradient-to-b ${t.bg}`}>
+      <div className={`p-5 bg-linear-to-b ${t.bg}`}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className={`text-xs font-extrabold uppercase tracking-wider ${t.text}`}>{label}</p>
