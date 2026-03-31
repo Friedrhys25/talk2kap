@@ -481,7 +481,7 @@ const Validations = () => {
               <table className="w-full min-w-[1100px] text-left">
                 <thead className="bg-indigo-50 sticky top-0 z-10">
                   <tr className="border-b border-indigo-100">
-                    {["Name", "Email", "Contact", "Purok", "Address", "Role", "Shift", "ID Status", "Verification", "Actions"].map((h) => (
+                    {["Name", "Contact", "Purok", "Address", "Role", "Shift", "ID Status", "Verification", "Actions"].map((h) => (
                       <th key={h} className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-indigo-700 ${h === "Actions" ? "text-right" : ""}`}>
                         {h}
                       </th>
@@ -503,7 +503,6 @@ const Validations = () => {
                           {user.complainant || "—"}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">{user.email || "—"}</td>
                       <td className="px-6 py-4 text-sm font-semibold text-gray-800">{user.number || "—"}</td>
                       <td className="px-6 py-4 text-sm font-semibold text-gray-800">Purok {user.purok || "—"}</td>
                       <td className="px-6 py-4 max-w-xs truncate text-sm text-gray-700" title={user.address || ""}>{user.address || "—"}</td>
@@ -555,7 +554,7 @@ const Validations = () => {
                   ))}
                   {filteredTanods.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="text-center py-10 text-gray-500 font-semibold">No tanods found</td>
+                      <td colSpan={9} className="text-center py-10 text-gray-500 font-semibold">No tanods found</td>
                     </tr>
                   )}
                 </tbody>
