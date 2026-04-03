@@ -8,21 +8,28 @@ import {
   FiEdit2,
   FiTrash2,
   FiPlus,
+  FiEye,
+  FiEyeOff,
 } from "react-icons/fi";
 import {
   collection,
   onSnapshot,
-  addDoc,
   updateDoc,
   deleteDoc,
   doc,
   query,
   where,
-  serverTimestamp,
 } from "firebase/firestore";
 import { firestore as db } from "../../firebaseConfig";
 
-const emptyForm = { firstName: "", lastName: "", middleName: "", position: "BARANGAY UTILITY" };
+const emptyForm = { firstName: "", lastName: "", middleName: "", suffix: "", position: "BARANGAY UTILITY", email: "", password: "", number: "", purok: "", address: "" };
+
+const API_URL = "http://localhost:5000";
+
+const capitalize = (str) => {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+};
 
 const positionOptions = [
   "All Positions",
@@ -43,6 +50,10 @@ export default function EmployeeTable() {
   const [feedbackMap, setFeedbackMap] = useState({}); // { employeeId: [feedback, ...] }
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null); // doc id being edited
+  const [creating, setCreating] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false); // confirmation modal
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -166,20 +177,59 @@ export default function EmployeeTable() {
   };
 
   // ─── CRUD ───────────────────────────────────────────────────────────────────
+  // ─── Validation ──────────────────────────────────────────────────────────
+  const validateForm = () => {
+    const errors = {};
+    if (!form.firstName.trim()) errors.firstName = "First name is required.";
+    if (!form.lastName.trim()) errors.lastName = "Last name is required.";
+    if (!editing) {
+      if (!form.email.trim()) errors.email = "Email is required.";
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = "Invalid email format.";
+      if (!form.password) errors.password = "Password is required.";
+      else if (form.password.length < 6) errors.password = "Must be at least 6 characters.";
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleAddClick = () => {
+    if (!validateForm()) return;
+    setShowConfirm(true);
+  };
+
   const createEmployee = async () => {
-    if (!form.firstName.trim() || !form.lastName.trim())
-      return alert("Please enter at least first and last name.");
-
-    await addDoc(collection(db, "employee"), {
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      middleName: form.middleName.trim(),
-      position: form.position,
-      isEmployee: true,
-      createdAt: serverTimestamp(),
-    });
-
-    setForm(emptyForm);
+    setShowConfirm(false);
+    setCreating(true);
+    try {
+      const res = await fetch(`${API_URL}/api/create-employee`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: form.email.trim(),
+          password: form.password,
+          firstName: capitalize(form.firstName.trim()),
+          lastName: capitalize(form.lastName.trim()),
+          middleName: capitalize(form.middleName.trim()),
+          suffix: form.suffix.trim(),
+          position: form.position,
+          number: form.number.trim(),
+          purok: form.purok,
+          address: form.address.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to create employee.");
+        return;
+      }
+      setForm(emptyForm);
+      setFormErrors({});
+    } catch (err) {
+      console.error("Error creating employee:", err);
+      alert("Failed to connect to backend. Make sure the server is running.");
+    } finally {
+      setCreating(false);
+    }
   };
 
   const startEdit = (e) => {
@@ -188,20 +238,23 @@ export default function EmployeeTable() {
       firstName: e.firstName || "",
       lastName: e.lastName || "",
       middleName: e.middleName || "",
+      suffix: e.suffix || "",
       position: e.position || "BARANGAY UTILITY",
+      number: e.number || "",
+      purok: e.purok || "",
+      address: e.address || "",
+      email: "",
+      password: "",
     });
   };
 
   const saveEdit = async () => {
     if (!editing) return;
-    if (!form.firstName.trim() || !form.lastName.trim())
-      return alert("Please enter at least first and last name.");
 
     await updateDoc(doc(db, "employee", editing), {
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      middleName: form.middleName.trim(),
-      position: form.position,
+      number: form.number.trim(),
+      purok: form.purok.trim(),
+      address: form.address.trim(),
     });
 
     setEditing(null);
@@ -313,92 +366,156 @@ export default function EmployeeTable() {
             )}
           </div>
 
-          <div className="mt-5 grid grid-cols-1 md:grid-cols-12 gap-3">
-            {/* First Name */}
-            <div className="md:col-span-3">
-              <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                First Name
-              </label>
-              <input
-                placeholder="e.g., Maria"
-                value={form.firstName}
-                onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-
-            {/* Middle Name */}
-            <div className="md:col-span-2">
-              <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                Middle Name
-              </label>
-              <input
-                placeholder="e.g., F"
-                value={form.middleName}
-                onChange={(e) => setForm({ ...form, middleName: e.target.value })}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-
-            {/* Last Name */}
-            <div className="md:col-span-3">
-              <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                Last Name
-              </label>
-              <input
-                placeholder="e.g., Santos"
-                value={form.lastName}
-                onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-
-            {/* Position */}
-            <div className="md:col-span-2">
-              <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                Position
-              </label>
-              <select
-                value={form.position}
-                onChange={(e) => setForm({ ...form, position: e.target.value })}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {positionOptions
-                  .filter((p) => p !== "All Positions")
-                  .map((p) => (
+          <div className="mt-5 space-y-3">
+            {/* Row 1: Name fields */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+              <div className="md:col-span-3">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">First Name *</label>
+                <input placeholder="e.g., Maria" value={form.firstName} disabled={!!editing}
+                  onChange={(e) => { setForm({ ...form, firstName: e.target.value }); setFormErrors((p) => ({ ...p, firstName: undefined })); }}
+                  className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${editing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''} ${formErrors.firstName ? 'border-red-400' : 'border-gray-200'}`} />
+                {formErrors.firstName && <p className="text-xs text-red-500 mt-1">{formErrors.firstName}</p>}
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Middle Name</label>
+                <input placeholder="e.g., F" value={form.middleName} disabled={!!editing}
+                  onChange={(e) => setForm({ ...form, middleName: e.target.value })}
+                  className={`w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${editing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`} />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Last Name *</label>
+                <input placeholder="e.g., Santos" value={form.lastName} disabled={!!editing}
+                  onChange={(e) => { setForm({ ...form, lastName: e.target.value }); setFormErrors((p) => ({ ...p, lastName: undefined })); }}
+                  className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${editing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''} ${formErrors.lastName ? 'border-red-400' : 'border-gray-200'}`} />
+                {formErrors.lastName && <p className="text-xs text-red-500 mt-1">{formErrors.lastName}</p>}
+              </div>
+              <div className="md:col-span-1">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Suffix</label>
+                <input placeholder="Jr." value={form.suffix} disabled={!!editing}
+                  onChange={(e) => setForm({ ...form, suffix: e.target.value })}
+                  className={`w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${editing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`} />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Position</label>
+                <select value={form.position} disabled={!!editing}
+                  onChange={(e) => setForm({ ...form, position: e.target.value })}
+                  className={`w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${editing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}>
+                  {positionOptions.filter((p) => p !== "All Positions").map((p) => (
                     <option key={p} value={p}>{p}</option>
                   ))}
-              </select>
+                </select>
+              </div>
             </div>
 
-            {/* Actions */}
-            <div className="md:col-span-2 flex items-end gap-2">
+            {/* Row 2: Contact + Location */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+              <div className="md:col-span-3">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Phone Number</label>
+                <input type="tel" placeholder="e.g., 09123456789" value={form.number}
+                  onChange={(e) => setForm({ ...form, number: e.target.value })}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Purok</label>
+                <select value={form.purok}
+                  onChange={(e) => setForm({ ...form, purok: e.target.value })}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="">Select</option>
+                  {["1","2","3","4","5","6"].map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Address</label>
+                <input placeholder="lot/block/street" value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+
+              {/* Email + Password — only when creating */}
+              {!editing && (
+                <>
+                  <div className="md:col-span-2">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Email *</label>
+                    <input type="email" placeholder="email@example.com" value={form.email}
+                      onChange={(e) => { setForm({ ...form, email: e.target.value }); setFormErrors((p) => ({ ...p, email: undefined })); }}
+                      className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${formErrors.email ? 'border-red-400' : 'border-gray-200'}`} />
+                    {formErrors.email && <p className="text-xs text-red-500 mt-1">{formErrors.email}</p>}
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Password *</label>
+                    <div className="relative">
+                      <input type={showPassword ? "text" : "password"} placeholder="Min 6 chars" value={form.password}
+                        onChange={(e) => { setForm({ ...form, password: e.target.value }); setFormErrors((p) => ({ ...p, password: undefined })); }}
+                        className={`w-full border rounded-xl px-4 py-2.5 pr-10 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${formErrors.password ? 'border-red-400' : 'border-gray-200'}`} />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                        {showPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
+                      </button>
+                    </div>
+                    {formErrors.password && <p className="text-xs text-red-500 mt-1">{formErrors.password}</p>}
+                  </div>
+                </>
+              )}
+
+              {editing && <div className="md:col-span-4" />}
+            </div>
+
+            {/* Row 3: Actions */}
+            <div className="flex items-center gap-2 pt-1">
               {editing ? (
                 <>
-                  <button
-                    onClick={saveEdit}
-                    className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-extrabold hover:bg-indigo-700 transition shadow-md text-sm"
-                  >
-                    <FiEdit2 /> Save
+                  <button onClick={saveEdit}
+                    className="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-extrabold hover:bg-indigo-700 transition shadow-md text-sm">
+                    <FiEdit2 /> Save Changes
                   </button>
-                  <button
-                    onClick={() => { setEditing(null); setForm(emptyForm); }}
-                    className="w-full inline-flex items-center justify-center gap-2 bg-slate-200 text-slate-800 px-4 py-2.5 rounded-xl font-extrabold hover:bg-slate-300 transition text-sm"
-                  >
-                    <FiXCircle />
+                  <button onClick={() => { setEditing(null); setForm(emptyForm); }}
+                    className="inline-flex items-center justify-center gap-2 bg-slate-200 text-slate-800 px-5 py-2.5 rounded-xl font-extrabold hover:bg-slate-300 transition text-sm">
+                    <FiXCircle /> Cancel
                   </button>
                 </>
               ) : (
-                <button
-                  onClick={createEmployee}
-                  className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-extrabold hover:bg-emerald-700 transition shadow-md text-sm"
-                >
-                  <FiPlus /> Add
+                <button onClick={handleAddClick} disabled={creating}
+                  className={`inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-extrabold transition shadow-md text-sm ${
+                    creating ? "bg-gray-400 text-white cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                  }`}>
+                  {creating ? (
+                    <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Creating...</>
+                  ) : (
+                    <><FiPlus /> Add Employee</>
+                  )}
                 </button>
               )}
             </div>
           </div>
         </div>
+
+        {/* Confirmation Modal */}
+        {showConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-extrabold text-gray-900 mb-3">Confirm Employee Creation</h3>
+              <p className="text-sm text-gray-600 mb-2">Are you sure you want to create this employee?</p>
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 mb-4">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-indigo-600 mb-1">Login Username</p>
+                <p className="text-sm font-bold text-indigo-900">{form.email}</p>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <button onClick={() => setShowConfirm(false)}
+                  className="px-5 py-2.5 rounded-xl font-extrabold bg-slate-200 text-slate-800 hover:bg-slate-300 transition text-sm">
+                  Cancel
+                </button>
+                <button onClick={createEmployee} disabled={creating}
+                  className={`px-5 py-2.5 rounded-xl font-extrabold transition shadow-md text-sm ${
+                    creating ? "bg-gray-400 text-white cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                  }`}>
+                  {creating ? (
+                    <span className="flex items-center gap-2"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Creating...</span>
+                  ) : "Confirm"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Table */}
         <div className="bg-white/80 backdrop-blur rounded-2xl shadow-2xl border border-white/60 overflow-hidden">

@@ -1,18 +1,18 @@
 ﻿// Notiftable.jsx
-// Flow: pending → assign tanod modal → in-progress → Mark as Resolved (direct, no feedback input)
+// Flow: pending → deploy tanod → in-progress → Mark as Resolved (direct, no feedback input)
 // Admin views citizen-submitted feedback via "View Feedback" button on resolved complaints
-// On assign:  writes assignedComplaints[] to users/{tanodUid} in Firestore
-// On resolve: updates status to "resolved" inside assignedComplaints[]
+// On deploy:  sets deploymentStatus & deployedTo on tanod, sets deployedTanodUid/Name on complaint
+// On resolve: clears tanod deployment, updates complaint status to "resolved"
 import React, { useState, useEffect, useMemo } from "react";
 import {
   FiAlertTriangle, FiClock, FiSearch, FiX,
   FiUser, FiMapPin, FiFileText, FiCalendar,
-  FiCheckCircle, FiHome, FiShield, FiStar, FiMessageSquare,
-  FiEye, FiList,
+  FiCheckCircle, FiHome, FiShield, FiStar,
+  FiChevronLeft, FiChevronRight,
 } from "react-icons/fi";
 import {
   collection, onSnapshot, doc, updateDoc,
-  getDoc, serverTimestamp, query, where,
+  getDoc, setDoc, serverTimestamp,
 } from "firebase/firestore";
 import { firestore } from "../../firebaseConfig";
 
@@ -45,135 +45,7 @@ const StarDisplay = ({ value = 0, size = 22 }) => (
 const ratingLabel = (r) =>
   ["", "Poor", "Fair", "Good", "Very Good", "Excellent"][r] || "";
 
-// ── Tanod Workload Modal ──────────────────────────────────────────────────────
-const TanodWorkloadModal = ({ tanod, allComplaints, onClose }) => {
-  const assigned = useMemo(() => {
-    if (!tanod) return [];
-    return allComplaints.filter(
-      (c) => c.assignedTanodUid === tanod.uid && c.status !== "resolved"
-    );
-  }, [tanod, allComplaints]);
 
-  const resolved = useMemo(() => {
-    if (!tanod) return [];
-    return allComplaints.filter(
-      (c) => c.assignedTanodUid === tanod.uid && c.status === "resolved"
-    );
-  }, [tanod, allComplaints]);
-
-  if (!tanod) return null;
-
-  const statusPill = (s) => ({
-    "in-progress":  "bg-blue-100 text-blue-800 ring-1 ring-blue-200",
-    "in progress":  "bg-blue-100 text-blue-800 ring-1 ring-blue-200",
-    resolved:       "bg-green-100 text-green-800 ring-1 ring-green-200",
-    pending:        "bg-yellow-100 text-yellow-800 ring-1 ring-yellow-200",
-  })[(s || "").toLowerCase()] || "bg-gray-100 text-gray-700";
-
-  const statusText = (s) => ({
-    "in-progress": "In Progress",
-    "in progress": "In Progress",
-    resolved:      "Resolved",
-    pending:       "Pending",
-  })[(s || "").toLowerCase()] || s;
-
-  return (
-    <div
-      className="fixed inset-0 z-80 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="bg-linear-to-r from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3 text-white">
-            <div className="bg-white/20 p-2.5 rounded-xl"><FiShield size={20} /></div>
-            <div>
-              <h3 className="text-lg font-extrabold">{tanod.fullName}</h3>
-              <p className="text-indigo-100 text-xs font-semibold capitalize mt-0.5">
-                {tanod.employeeRole || tanod.position || "Employee"}
-              </p>
-            </div>
-          </div>
-          <button
-            className="text-white/80 hover:text-white hover:bg-white/15 rounded-full p-2 transition"
-            onClick={onClose}
-          >
-            <FiX size={20} />
-          </button>
-        </div>
-
-        <div className="px-6 py-4 border-b flex gap-3 shrink-0">
-          <div className="flex-1 rounded-xl bg-blue-50 ring-1 ring-blue-200 px-4 py-3 text-center">
-            <p className="text-2xl font-extrabold text-blue-700">{assigned.length}</p>
-            <p className="text-xs font-bold text-blue-600 mt-0.5">Active</p>
-          </div>
-          <div className="flex-1 rounded-xl bg-green-50 ring-1 ring-green-200 px-4 py-3 text-center">
-            <p className="text-2xl font-extrabold text-green-700">{resolved.length}</p>
-            <p className="text-xs font-bold text-green-600 mt-0.5">Resolved</p>
-          </div>
-          <div className="flex-1 rounded-xl bg-indigo-50 ring-1 ring-indigo-200 px-4 py-3 text-center">
-            <p className="text-2xl font-extrabold text-indigo-700">{assigned.length + resolved.length}</p>
-            <p className="text-xs font-bold text-indigo-600 mt-0.5">Total</p>
-          </div>
-        </div>
-
-        <div className="p-6 overflow-y-auto flex-1 space-y-3">
-          {assigned.length === 0 && resolved.length === 0 ? (
-            <div className="text-center py-10">
-              <FiList className="mx-auto text-gray-300 mb-3" size={36} />
-              <p className="text-gray-500 text-sm font-bold">No complaints assigned to this tanod.</p>
-            </div>
-          ) : (
-            <>
-              {assigned.length > 0 && (
-                <>
-                  <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500 mb-2">Active Assignments</p>
-                  {assigned.map((c) => (
-                    <div key={c.complaintKey} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-extrabold text-gray-900 truncate">{c.name}</p>
-                          <p className="text-xs text-gray-500 font-semibold">Purok {c.incidentPurok} · {c.type}</p>
-                        </div>
-                        <span className={`shrink-0 inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${statusPill(c.status)}`}>
-                          {statusText(c.status)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-600 font-semibold line-clamp-2">{c.message}</p>
-                      <p className="text-xs text-gray-400 font-semibold">{c.timestamp}</p>
-                    </div>
-                  ))}
-                </>
-              )}
-              {resolved.length > 0 && (
-                <>
-                  <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500 mt-4 mb-2">Resolved Complaints</p>
-                  {resolved.map((c) => (
-                    <div key={c.complaintKey} className="rounded-xl border border-gray-100 bg-slate-50 p-4 space-y-1 opacity-80">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-gray-700 truncate">{c.name}</p>
-                          <p className="text-xs text-gray-400 font-semibold">Purok {c.incidentPurok} · {c.type}</p>
-                        </div>
-                        <span className={`shrink-0 inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${statusPill(c.status)}`}>
-                          {statusText(c.status)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 font-semibold line-clamp-1">{c.message}</p>
-                      <p className="text-xs text-gray-400 font-semibold">{c.timestamp}</p>
-                    </div>
-                  ))}
-                </>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // ── Confirm Resolve Modal ─────────────────────────────────────────────────────
 const ConfirmResolveModal = ({ complaint, onConfirm, onCancel, resolving }) => {
@@ -212,12 +84,12 @@ const ConfirmResolveModal = ({ complaint, onConfirm, onCancel, resolving }) => {
             </p>
           </div>
 
-          {complaint.assignedTanodName && (
+          {complaint.deployedTanodName && (
             <div className="flex items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3">
               <div className="bg-indigo-600 text-white p-2 rounded-xl shrink-0"><FiShield size={15} /></div>
               <div>
-                <p className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider">Assigned Tanod</p>
-                <p className="text-sm font-bold text-gray-800 mt-0.5">{complaint.assignedTanodName}</p>
+                <p className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider">Deployed Tanod</p>
+                <p className="text-sm font-bold text-gray-800 mt-0.5">{complaint.deployedTanodName}</p>
               </div>
             </div>
           )}
@@ -258,21 +130,21 @@ const Notiftable = () => {
   const [notifications, setNotifications] = useState([]);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [previewImage, setPreviewImage]   = useState(null);
-  const [feedbackAvailable, setFeedbackAvailable] = useState({});
   const [seenKeys]                        = useState(() => loadSeenKeys());
   const [loading, setLoading]             = useState(true);
   const [startDate, setStartDate]         = useState("");
   const [endDate, setEndDate]             = useState("");
   const [dateError, setDateError]         = useState("");
 
+  // ── Deploy Tanod ─────────────────────────────────────────────────────────
   const [tanods, setTanods]               = useState([]);
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assignTarget, setAssignTarget]   = useState(null);
+  const [showDeployModal, setShowDeployModal] = useState(false);
+  const [deployTarget, setDeployTarget]   = useState(null);
   const [selectedTanod, setSelectedTanod] = useState("");
-  const [assigning, setAssigning]         = useState(false);
-
-  const [showWorkloadModal, setShowWorkloadModal] = useState(false);
-  const [workloadTanod, setWorkloadTanod]         = useState(null);
+  const [deploying, setDeploying]         = useState(false);
+  const [tanodSearch, setTanodSearch]     = useState("");
+  const [tanodPage, setTanodPage]         = useState(1);
+  const TANODS_PER_PAGE = 5;
 
   // ── View Feedback (read-only) ─────────────────────────────────────────────
   const [showViewFeedbackModal, setShowViewFeedbackModal] = useState(false);
@@ -284,10 +156,9 @@ const Notiftable = () => {
   const [resolvingComplaint, setResolvingComplaint] = useState(null);
   const [resolving, setResolving]                   = useState(false);
 
-  // ── Fetch tanods ──────────────────────────────────────────────────────────
+  // ── Fetch tanods (employees) ──────────────────────────────────────────────
   useEffect(() => {
-    const q = query(collection(firestore, "users"), where("isEmployee", "==", true));
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = onSnapshot(collection(firestore, "employee"), (snap) => {
       const list = snap.docs.map((d) => ({
         uid: d.id, ...d.data(),
         fullName: [d.data().firstName, d.data().middleName, d.data().lastName]
@@ -299,22 +170,8 @@ const Notiftable = () => {
     return () => unsub();
   }, []);
 
-  // ── Feedback listener (for notification dots) ─────────────────────────────
-  useEffect(() => {
-    const unsub = onSnapshot(collection(firestore, "complaintFeedback"), (snap) => {
-      const map = {};
-      snap.forEach((d) => {
-        const data = d.data();
-        if (
-          (data?.tanodRating || data?.rating || data?.systemRating) &&
-          !seenKeys.has(d.id)
-        )
-          map[d.id] = true;
-      });
-      setFeedbackAvailable(map);
-    });
-    return () => unsub();
-  }, []);
+  // ── Feedback notification dots ─────────────────────────────────────────────
+  // Driven by `hasFeedback` flag on complaint docs. No separate listener needed.
 
   // ── Complaints listener ───────────────────────────────────────────────────
   useEffect(() => {
@@ -356,9 +213,9 @@ const Notiftable = () => {
                     status:            c.status || "pending",
                     timestamp:         timestampStr,
                     _rawTimestamp:     rawDate,
-                    assignedTanodUid:  c.assignedTanodUid  || null,
-                    assignedTanodName: c.assignedTanodName || null,
-                    feedbackDocId:     c.feedbackDocId     || null,
+                    deployedTanodUid:  c.deployedTanodUid  || null,
+                    deployedTanodName: c.deployedTanodName || null,
+                    hasFeedback:       c.hasFeedback       || false,
                   });
                 });
                 return [...rest, ...fresh].sort((a, b) => b._rawTimestamp - a._rawTimestamp);
@@ -442,73 +299,69 @@ const Notiftable = () => {
     resolved:      { pill: "bg-green-100 text-green-900 ring-1 ring-green-200",    text: "Resolved"    },
   })[(status || "").toLowerCase()] || { pill: "bg-yellow-100 text-yellow-900 ring-1 ring-yellow-200", text: "Pending" };
 
-  // ── Assign tanod ──────────────────────────────────────────────────────────
-  const openAssignModal = (complaint) => {
-    setAssignTarget(complaint);
-    setSelectedTanod(complaint.assignedTanodUid || "");
-    setShowAssignModal(true);
+  // ── Deploy tanod ───────────────────────────────────────────────────────────
+  const openDeployModal = (complaint) => {
+    setDeployTarget(complaint);
+    setSelectedTanod("");
+    setTanodSearch("");
+    setTanodPage(1);
+    setShowDeployModal(true);
   };
 
-  const confirmAssignAndApprove = async () => {
-    if (!selectedTanod) return alert("Please select a tanod first.");
-    if (!assignTarget)  return;
-    setAssigning(true);
+  const filteredTanods = useMemo(() => {
+    const term = tanodSearch.toLowerCase();
+    return tanods.filter((t) =>
+      !term || t.fullName.toLowerCase().includes(term)
+    );
+  }, [tanods, tanodSearch]);
+
+  const tanodTotalPages = Math.max(1, Math.ceil(filteredTanods.length / TANODS_PER_PAGE));
+  const paginatedTanods = filteredTanods.slice(
+    (tanodPage - 1) * TANODS_PER_PAGE,
+    tanodPage * TANODS_PER_PAGE
+  );
+
+  const confirmDeploy = async () => {
+    if (!selectedTanod || !deployTarget) return;
+    setDeploying(true);
     try {
       const tanod     = tanods.find((t) => t.uid === selectedTanod);
       const tanodName = tanod?.fullName || "";
 
+      // Update complaint: set status to in-progress + deployed tanod info
       await updateDoc(
-        doc(firestore, "users", assignTarget.userId, "userComplaints", assignTarget.complaintKey),
-        { assignedTanodUid: selectedTanod, assignedTanodName: tanodName, status: "in-progress" }
+        doc(firestore, "users", deployTarget.userId, "userComplaints", deployTarget.complaintKey),
+        { deployedTanodUid: selectedTanod, deployedTanodName: tanodName, status: "in-progress" }
       );
 
-      const newEntry = {
-        complaintKey:      assignTarget.complaintKey,
-        description:       assignTarget.message,
-        complainantName:   assignTarget.name,
-        complainantUserId: assignTarget.userId,
-        type:              assignTarget.type,
-        incidentPurok:     assignTarget.incidentPurok,
-        incidentLocation:  assignTarget.incidentLocation,
-        urgency:           assignTarget.label,
-        status:            "in-progress",
-        assignedAt:        new Date().toISOString(),
-      };
-
-      const newTanodRef  = doc(firestore, "users", selectedTanod);
-      const newTanodSnap = await getDoc(newTanodRef);
-      const existingList = newTanodSnap.exists() ? (newTanodSnap.data().assignedComplaints || []) : [];
-      const alreadyExists = existingList.some((e) => e.complaintKey === assignTarget.complaintKey);
-      const updatedList = alreadyExists
-        ? existingList.map((e) => e.complaintKey === assignTarget.complaintKey ? newEntry : e)
-        : [...existingList, newEntry];
-      await updateDoc(newTanodRef, { assignedComplaints: updatedList });
-
-      if (assignTarget.assignedTanodUid && assignTarget.assignedTanodUid !== selectedTanod) {
-        const oldTanodRef  = doc(firestore, "users", assignTarget.assignedTanodUid);
-        const oldTanodSnap = await getDoc(oldTanodRef);
-        if (oldTanodSnap.exists()) {
-          const cleanedList = (oldTanodSnap.data().assignedComplaints || []).filter(
-            (e) => e.complaintKey !== assignTarget.complaintKey
-          );
-          await updateDoc(oldTanodRef, { assignedComplaints: cleanedList });
-        }
-      }
+      // Update tanod: mark as deployed
+      await updateDoc(doc(firestore, "employee", selectedTanod), {
+        deploymentStatus: "deployed",
+        deployedTo: {
+          complaintKey:    deployTarget.complaintKey,
+          userId:          deployTarget.userId,
+          complainantName: deployTarget.name,
+          type:            deployTarget.type,
+          incidentPurok:   deployTarget.incidentPurok,
+          description:     deployTarget.message,
+          deployedAt:      new Date().toISOString(),
+        },
+      });
 
       const patch = (c) =>
-        c.complaintKey === assignTarget.complaintKey
-          ? { ...c, assignedTanodUid: selectedTanod, assignedTanodName: tanodName, status: "in-progress" }
+        c.complaintKey === deployTarget.complaintKey
+          ? { ...c, deployedTanodUid: selectedTanod, deployedTanodName: tanodName, status: "in-progress" }
           : c;
       setNotifications((prev) => prev.map(patch));
       setSelectedComplaint((prev) => prev ? patch(prev) : prev);
-      setShowAssignModal(false);
-      setAssignTarget(null);
+      setShowDeployModal(false);
+      setDeployTarget(null);
       setSelectedTanod("");
     } catch (err) {
       console.error(err);
-      alert("Failed to assign tanod.");
+      alert("Failed to deploy tanod.");
     } finally {
-      setAssigning(false);
+      setDeploying(false);
     }
   };
 
@@ -522,22 +375,41 @@ const Notiftable = () => {
     if (!resolvingComplaint) return;
     setResolving(true);
     try {
+      // Mark complaint as resolved
       await updateDoc(
         doc(firestore, "users", resolvingComplaint.userId, "userComplaints", resolvingComplaint.complaintKey),
         { status: "resolved", resolvedAt: serverTimestamp() }
       );
 
-      if (resolvingComplaint.assignedTanodUid) {
-        const tanodRef  = doc(firestore, "users", resolvingComplaint.assignedTanodUid);
+      // Clear tanod deployment status & save to deployment history
+      if (resolvingComplaint.deployedTanodUid) {
+        const tanodRef = doc(firestore, "employee", resolvingComplaint.deployedTanodUid);
         const tanodSnap = await getDoc(tanodRef);
-        if (tanodSnap.exists()) {
-          const updated = (tanodSnap.data().assignedComplaints || []).map((entry) =>
-            entry.complaintKey === resolvingComplaint.complaintKey
-              ? { ...entry, status: "resolved", resolvedAt: new Date().toISOString() }
-              : entry
-          );
-          await updateDoc(tanodRef, { assignedComplaints: updated });
-        }
+        const deployedTo = tanodSnap.exists() ? tanodSnap.data().deployedTo : null;
+
+        // Save resolved deployment to history subcollection
+        await setDoc(
+          doc(firestore, "employee", resolvingComplaint.deployedTanodUid, "deploymentHistory", resolvingComplaint.complaintKey),
+          {
+            complaintKey:    resolvingComplaint.complaintKey,
+            userId:          resolvingComplaint.userId,
+            complainantName: resolvingComplaint.name,
+            type:            resolvingComplaint.type,
+            incidentPurok:   resolvingComplaint.incidentPurok,
+            description:     resolvingComplaint.message,
+            deployedAt:      deployedTo?.deployedAt || null,
+            resolvedAt:      new Date().toISOString(),
+            status:          "resolved",
+            tanodRating:     null,
+            tanodComment:    null,
+          }
+        );
+
+        // Clear current deployment
+        await updateDoc(tanodRef, {
+          deploymentStatus: "available",
+          deployedTo: null,
+        });
       }
 
       const patch = (c) =>
@@ -556,34 +428,35 @@ const Notiftable = () => {
     }
   };
 
-  // ── View citizen-submitted feedback (read-only) ───────────────────────────
+  // ── View citizen-submitted feedback (read from deploymentHistory) ──────────
   const handleViewFeedback = async (complaint) => {
-    const key = complaint.feedbackDocId || complaint.complaintKey;
-    if (!key) return;
+    if (!complaint.deployedTanodUid || !complaint.complaintKey) return;
     setFeedbackLoading(true);
     setViewFeedbackData(null);
     setShowViewFeedbackModal(true);
     try {
-      const fbDoc = await getDoc(doc(firestore, "complaintFeedback", key));
-      setViewFeedbackData(fbDoc.exists() ? { id: fbDoc.id, ...fbDoc.data() } : null);
+      const histDoc = await getDoc(
+        doc(firestore, "employee", complaint.deployedTanodUid, "deploymentHistory", complaint.complaintKey)
+      );
+      setViewFeedbackData(histDoc.exists() ? { id: histDoc.id, ...histDoc.data() } : null);
     } catch {
       setViewFeedbackData(null);
     } finally {
       setFeedbackLoading(false);
     }
+    const key = complaint.complaintKey;
     saveSeenKey(key);
     seenKeys.add(key);
-    setFeedbackAvailable((prev) => { const u = { ...prev }; delete u[key]; return u; });
   };
 
   // ── Action button logic ───────────────────────────────────────────────────
   const handleActionClick = (complaint) => {
-    if (complaint.status === "pending") openAssignModal(complaint);
+    if (complaint.status === "pending") openDeployModal(complaint);
     else if (["in-progress", "in progress"].includes(complaint.status)) openConfirmResolve(complaint);
   };
 
   const actionLabel = (s) =>
-    s === "pending"                              ? "Assign Tanod & Approve →"
+    s === "pending"                              ? "Deploy Tanod →"
     : ["in-progress", "in progress"].includes(s) ? "Mark as Resolved"
     : "Resolved ✓";
 
@@ -591,12 +464,6 @@ const Notiftable = () => {
     s === "pending"                              ? "bg-blue-600 hover:bg-blue-700"
     : ["in-progress", "in progress"].includes(s) ? "bg-green-600 hover:bg-green-700"
     : "bg-gray-400 cursor-not-allowed";
-
-  const getTanodActiveCount = (tanodUid) =>
-    notifications.filter(
-      (c) => c.assignedTanodUid === tanodUid &&
-             ["in-progress", "in progress"].includes(c.status)
-    ).length;
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -739,7 +606,7 @@ const Notiftable = () => {
               <table className="w-full min-w-[1080px] text-left">
                 <thead>
                   <tr className="bg-linear-to-r from-slate-50 via-white to-slate-50 border-b border-gray-200">
-                    {["Urgency", "Purok", "Complainant", "Issue Type", "Description", "Assigned Tanod", "Date", "Status"].map((h) => (
+                    {["Urgency", "Purok", "Complainant", "Issue Type", "Description", "Deployed Tanod", "Date", "Status"].map((h) => (
                       <th key={h} className="px-5 py-4 text-xs font-extrabold tracking-wider text-gray-600 uppercase">{h}</th>
                     ))}
                   </tr>
@@ -763,7 +630,7 @@ const Notiftable = () => {
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
                             {n.name}
-                            {n.status === "resolved" && feedbackAvailable[n.feedbackDocId || n.complaintKey] && (
+                            {n.status === "resolved" && n.hasFeedback && !seenKeys.has(n.complaintKey) && (
                               <span className="relative flex items-center justify-center">
                                 <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75" />
                                 <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600" />
@@ -778,8 +645,8 @@ const Notiftable = () => {
                           <p className="text-sm font-semibold text-gray-700 line-clamp-1">{n.message}</p>
                         </td>
                         <td className="px-5 py-4">
-                          {n.assignedTanodName
-                            ? <div className="flex items-center gap-1.5"><FiShield className="text-indigo-500 shrink-0" size={14} /><span className="text-xs font-bold text-indigo-700">{n.assignedTanodName}</span></div>
+                          {n.deployedTanodName
+                            ? <div className="flex items-center gap-1.5"><FiShield className="text-indigo-500 shrink-0" size={14} /><span className="text-xs font-bold text-indigo-700">{n.deployedTanodName}</span></div>
                             : <span className="text-xs text-gray-400 font-semibold italic">Unassigned</span>}
                         </td>
                         <td className="px-5 py-4 text-sm font-semibold text-gray-800">{n.timestamp}</td>
@@ -834,10 +701,10 @@ const Notiftable = () => {
                       {getUrgencyDisplay(selectedComplaint.label).text}
                     </div>
                   </div>
-                  {selectedComplaint.assignedTanodName && (
+                  {selectedComplaint.deployedTanodName && (
                     <div className="rounded-xl px-4 py-3 bg-indigo-50 ring-1 ring-indigo-200">
                       <div className="flex items-center gap-2 text-sm font-bold text-indigo-800">
-                        <FiShield size={18} />Tanod: {selectedComplaint.assignedTanodName}
+                        <FiShield size={18} />Deployed: {selectedComplaint.deployedTanodName}
                       </div>
                     </div>
                   )}
@@ -902,131 +769,169 @@ const Notiftable = () => {
           </div>
         )}
 
-        {/* ── Assign Tanod Modal ───────────────────────────────────────────── */}
-        {showAssignModal && (
+        {/* ── Deploy Tanod Modal ──────────────────────────────────────────── */}
+        {showDeployModal && (
           <div
             className="fixed inset-0 z-60 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
-            onClick={() => setShowAssignModal(false)}
+            onClick={() => setShowDeployModal(false)}
           >
             <div
-              className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden"
+              className="bg-white rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="bg-linear-to-r from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between">
+              <div className="bg-linear-to-r from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-3 text-white">
                   <div className="bg-white/20 p-2.5 rounded-xl"><FiShield size={20} /></div>
                   <div>
-                    <h3 className="text-lg font-extrabold">Assign Tanod</h3>
-                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">Select a tanod before approving</p>
+                    <h3 className="text-lg font-extrabold">Deploy Tanod</h3>
+                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">Select an available tanod to deploy</p>
                   </div>
                 </div>
                 <button
                   className="text-white/80 hover:text-white hover:bg-white/15 rounded-full p-2 transition"
-                  onClick={() => setShowAssignModal(false)}
+                  onClick={() => setShowDeployModal(false)}
                 >
                   <FiX size={20} />
                 </button>
               </div>
 
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-4 overflow-y-auto flex-1">
                 <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3">
                   <p className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider">Complaint</p>
-                  <p className="text-sm font-bold text-gray-800 mt-1 line-clamp-2">{assignTarget?.message || "—"}</p>
+                  <p className="text-sm font-bold text-gray-800 mt-1 line-clamp-2">{deployTarget?.message || "—"}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">
-                    by {assignTarget?.name} · Purok {assignTarget?.incidentPurok}
+                    by {deployTarget?.name} · Purok {deployTarget?.incidentPurok}
                   </p>
                 </div>
-                <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-gray-600 mb-2">
-                    Select Tanod / Employee
-                  </label>
-                  {tanods.length === 0 ? (
-                    <p className="text-sm text-gray-500 font-semibold">No tanods found.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                      {tanods.map((t) => {
-                        const activeCount = getTanodActiveCount(t.uid);
-                        return (
-                          <label
-                            key={t.uid}
-                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                              selectedTanod === t.uid
-                                ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-300"
-                                : "border-gray-200 bg-white hover:bg-gray-50"
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name="tanod"
-                              value={t.uid}
-                              checked={selectedTanod === t.uid}
-                              onChange={() => setSelectedTanod(t.uid)}
-                              className="accent-indigo-600"
-                            />
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-                                <FiUser size={15} />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-extrabold text-gray-900 truncate">{t.fullName}</p>
-                                <p className="text-xs text-gray-500 font-semibold truncate capitalize">
-                                  {t.employeeRole || t.position || "Employee"}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                                  activeCount === 0 ? "bg-green-100 text-green-700"
-                                  : activeCount <= 2 ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-red-100 text-red-700"
-                                }`}>
-                                  {activeCount} active
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); setWorkloadTanod(t); setShowWorkloadModal(true); }}
-                                  className="p-1.5 rounded-lg text-indigo-500 hover:bg-indigo-100 transition"
-                                  title="View assignments"
-                                >
-                                  <FiEye size={14} />
-                                </button>
-                              </div>
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
+
+                {/* Search tanods */}
+                <div className="relative">
+                  <FiSearch className="absolute left-3 top-1/2 text-gray-400 -translate-y-1/2" size={16} />
+                  <input
+                    type="text"
+                    placeholder="Search tanod by name or role..."
+                    className="w-full pl-9 pr-4 py-2.5 text-sm font-semibold border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                    value={tanodSearch}
+                    onChange={(e) => { setTanodSearch(e.target.value); setTanodPage(1); }}
+                  />
                 </div>
+
+                {/* Tanod table */}
+                {filteredTanods.length === 0 ? (
+                  <p className="text-sm text-gray-500 font-semibold text-center py-6">No tanods found.</p>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto rounded-xl border border-gray-200">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-gray-200">
+                            <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider w-8"></th>
+                            <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider">Name</th>
+                            <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider">Role</th>
+                            <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedTanods.map((t) => {
+                            const isDeployed = t.deploymentStatus === "deployed";
+                            const isSelected = selectedTanod === t.uid;
+                            return (
+                              <tr
+                                key={t.uid}
+                                onClick={() => { if (!isDeployed) setSelectedTanod(t.uid); }}
+                                className={`border-b border-gray-100 transition ${
+                                  isDeployed
+                                    ? "opacity-50 cursor-not-allowed bg-gray-50"
+                                    : isSelected
+                                    ? "bg-indigo-50 ring-1 ring-indigo-300 cursor-pointer"
+                                    : "hover:bg-gray-50 cursor-pointer"
+                                }`}
+                              >
+                                <td className="px-4 py-3">
+                                  <input
+                                    type="radio"
+                                    name="deployTanod"
+                                    value={t.uid}
+                                    checked={isSelected}
+                                    disabled={isDeployed}
+                                    onChange={() => setSelectedTanod(t.uid)}
+                                    className="accent-indigo-600"
+                                  />
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                                      <FiUser size={14} />
+                                    </div>
+                                    <span className="text-sm font-extrabold text-gray-900 truncate">{t.fullName}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-xs font-semibold text-gray-500 capitalize">
+                                  Tanod
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
+                                    isDeployed
+                                      ? "bg-red-100 text-red-700 ring-1 ring-red-200"
+                                      : "bg-green-100 text-green-700 ring-1 ring-green-200"
+                                  }`}>
+                                    {isDeployed ? "Deployed" : "Available"}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination */}
+                    {tanodTotalPages > 1 && (
+                      <div className="flex items-center justify-between pt-1">
+                        <p className="text-xs font-semibold text-gray-500">
+                          Page {tanodPage} of {tanodTotalPages} · {filteredTanods.length} tanod{filteredTanods.length !== 1 ? "s" : ""}
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setTanodPage((p) => Math.max(1, p - 1))}
+                            disabled={tanodPage <= 1}
+                            className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                          >
+                            <FiChevronLeft size={16} />
+                          </button>
+                          <button
+                            onClick={() => setTanodPage((p) => Math.min(tanodTotalPages, p + 1))}
+                            disabled={tanodPage >= tanodTotalPages}
+                            className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                          >
+                            <FiChevronRight size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
-              <div className="border-t px-6 py-4 bg-slate-50 flex gap-3">
+              <div className="border-t px-6 py-4 bg-slate-50 flex gap-3 shrink-0">
                 <button
-                  onClick={() => setShowAssignModal(false)}
+                  onClick={() => setShowDeployModal(false)}
                   className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={confirmAssignAndApprove}
-                  disabled={!selectedTanod || assigning}
+                  onClick={confirmDeploy}
+                  disabled={!selectedTanod || deploying}
                   className={`flex-1 py-3 rounded-xl text-white font-extrabold text-sm transition shadow-md ${
-                    !selectedTanod || assigning ? "bg-gray-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
+                    !selectedTanod || deploying ? "bg-gray-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
                   }`}
                 >
-                  {assigning ? "Assigning…" : "Confirm & Approve →"}
+                  {deploying ? "Deploying…" : "Confirm & Deploy →"}
                 </button>
               </div>
             </div>
           </div>
-        )}
-
-        {/* ── Tanod Workload Modal ─────────────────────────────────────────── */}
-        {showWorkloadModal && (
-          <TanodWorkloadModal
-            tanod={workloadTanod}
-            allComplaints={notifications}
-            onClose={() => { setShowWorkloadModal(false); setWorkloadTanod(null); }}
-          />
         )}
 
         {/* ── Confirm Resolve Modal ────────────────────────────────────────── */}
@@ -1075,17 +980,15 @@ const Notiftable = () => {
                   </div>
                 ) : viewFeedbackData ? (
                   <>
-                    {/* Complainant info */}
-                    {(viewFeedbackData.complainantName || viewFeedbackData.citizen || viewFeedbackData.complaintType) && (
+                    {/* Complaint info */}
+                    {viewFeedbackData.complainantName && (
                       <div className="rounded-xl border border-gray-200 bg-slate-50 px-4 py-3">
                         <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wider">Complaint</p>
-                        {(viewFeedbackData.complainantName || viewFeedbackData.citizen) && (
-                          <p className="text-sm font-bold text-gray-800 mt-0.5">
-                            by {viewFeedbackData.complainantName || viewFeedbackData.citizen}
-                          </p>
-                        )}
-                        {viewFeedbackData.complaintType && (
-                          <p className="text-xs text-gray-500 font-semibold">{viewFeedbackData.complaintType}</p>
+                        <p className="text-sm font-bold text-gray-800 mt-0.5">
+                          by {viewFeedbackData.complainantName}
+                        </p>
+                        {viewFeedbackData.type && (
+                          <p className="text-xs text-gray-500 font-semibold">{viewFeedbackData.type} · Purok {viewFeedbackData.incidentPurok}</p>
                         )}
                       </div>
                     )}
@@ -1094,22 +997,17 @@ const Notiftable = () => {
                     <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 space-y-3">
                       <div className="flex items-center gap-3">
                         <div className="bg-indigo-600 text-white p-2.5 rounded-xl shrink-0"><FiShield size={17} /></div>
-                        <div>
-                          <p className="text-sm font-extrabold text-gray-900">Tanod Rating</p>
-                          {(viewFeedbackData.employeeName) && (
-                            <p className="text-xs text-indigo-700 font-semibold">{viewFeedbackData.employeeName}</p>
-                          )}
-                        </div>
+                        <p className="text-sm font-extrabold text-gray-900">Tanod Rating</p>
                       </div>
 
-                      {(viewFeedbackData.tanodRating || viewFeedbackData.rating) ? (
+                      {viewFeedbackData.tanodRating ? (
                         <>
                           <div className="flex items-center gap-3">
-                            <StarDisplay value={viewFeedbackData.tanodRating || viewFeedbackData.rating || 0} />
+                            <StarDisplay value={viewFeedbackData.tanodRating} />
                             <span className="text-sm font-extrabold text-gray-800">
-                              {viewFeedbackData.tanodRating || viewFeedbackData.rating || 0}/5
+                              {viewFeedbackData.tanodRating}/5
                               <span className="ml-1.5 text-indigo-600 font-bold">
-                                — {ratingLabel(viewFeedbackData.tanodRating || viewFeedbackData.rating)}
+                                — {ratingLabel(viewFeedbackData.tanodRating)}
                               </span>
                             </span>
                           </div>
@@ -1130,87 +1028,24 @@ const Notiftable = () => {
                       )}
                     </div>
 
-                    {/* System Rating */}
-                    <div className="rounded-2xl border border-purple-100 bg-purple-50/60 p-5 space-y-3">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-purple-600 text-white p-2.5 rounded-xl shrink-0"><FiCheckCircle size={17} /></div>
-                        <div>
-                          <p className="text-sm font-extrabold text-gray-900">System Rating</p>
-                          <p className="text-xs text-purple-700 font-semibold">Talk2Kap Barangay App</p>
-                        </div>
-                      </div>
-
-                      {viewFeedbackData.systemRating ? (
-                        <>
-                          <div className="flex items-center gap-3">
-                            <StarDisplay value={viewFeedbackData.systemRating || 0} />
-                            <span className="text-sm font-extrabold text-gray-800">
-                              {viewFeedbackData.systemRating || 0}/5
-                              <span className="ml-1.5 text-purple-600 font-bold">
-                                — {ratingLabel(viewFeedbackData.systemRating)}
-                              </span>
-                            </span>
-                          </div>
-                          {viewFeedbackData.systemComment ? (
-                            <div className="bg-white rounded-xl border border-purple-100 p-3">
-                              <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1">Comment</p>
-                              <p className="text-sm text-gray-700 leading-relaxed">{viewFeedbackData.systemComment}</p>
-                            </div>
-                          ) : (
-                            <p className="text-xs text-gray-400 font-semibold italic">No comment provided.</p>
-                          )}
-                        </>
-                      ) : (
-                        <div className="flex items-center gap-2 py-2">
-                          <StarDisplay value={0} />
-                          <span className="text-sm text-gray-400 font-semibold italic">No rating submitted yet.</span>
-                        </div>
-                      )}
-                    </div>
-
                     {/* Resolved timestamp */}
                     {viewFeedbackData.resolvedAt && (
                       <p className="text-xs text-gray-400 font-semibold text-center">
-                        Feedback submitted on{" "}
-                        {viewFeedbackData.resolvedAt?.toDate
-                          ? viewFeedbackData.resolvedAt.toDate().toLocaleString()
-                          : typeof viewFeedbackData.resolvedAt === "string"
-                          ? viewFeedbackData.resolvedAt
-                          : "—"}
+                        Resolved on {viewFeedbackData.resolvedAt}
                       </p>
                     )}
                   </>
                 ) : (
-                  <>
-                    {/* Tanod Rating — empty state */}
-                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 space-y-3">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-indigo-600 text-white p-2.5 rounded-xl shrink-0"><FiShield size={17} /></div>
-                        <div>
-                          <p className="text-sm font-extrabold text-gray-900">Tanod Rating</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 py-1">
-                        <StarDisplay value={0} />
-                        <span className="text-sm text-gray-400 font-semibold italic">No rating submitted yet.</span>
-                      </div>
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-indigo-600 text-white p-2.5 rounded-xl shrink-0"><FiShield size={17} /></div>
+                      <p className="text-sm font-extrabold text-gray-900">Tanod Rating</p>
                     </div>
-
-                    {/* System Rating — empty state */}
-                    <div className="rounded-2xl border border-purple-100 bg-purple-50/60 p-5 space-y-3">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-purple-600 text-white p-2.5 rounded-xl shrink-0"><FiCheckCircle size={17} /></div>
-                        <div>
-                          <p className="text-sm font-extrabold text-gray-900">System Rating</p>
-                          <p className="text-xs text-purple-700 font-semibold">Talk2Kap Barangay App</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 py-1">
-                        <StarDisplay value={0} />
-                        <span className="text-sm text-gray-400 font-semibold italic">No rating submitted yet.</span>
-                      </div>
+                    <div className="flex items-center gap-3 py-1">
+                      <StarDisplay value={0} />
+                      <span className="text-sm text-gray-400 font-semibold italic">No rating submitted yet.</span>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
             </div>

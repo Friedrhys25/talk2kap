@@ -48,6 +48,7 @@ const MessageTable = () => {
   const [filter, setFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [conversations, setConversations] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);       // { userId, name }
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [reply, setReply] = useState("");
   const messagesEndRef = useRef(null);
@@ -141,9 +142,9 @@ const MessageTable = () => {
 
   // ── Stats ───────────────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
+    users:  new Set(conversations.map((c) => c.userId)).size,
     total:  conversations.length,
     unread: conversations.filter((c) => c.status === "unread").length,
-    read:   conversations.filter((c) => c.status === "read").length,
   }), [conversations]);
 
   // ── Filtered list ───────────────────────────────────────────────────────────
@@ -160,6 +161,30 @@ const MessageTable = () => {
       return matchesFilter && matchesSearch;
     });
   }, [conversations, filter, searchTerm]);
+
+  // ── Group by user ──────────────────────────────────────────────────────────
+  const groupedByUser = useMemo(() => {
+    const map = {};
+    filteredConversations.forEach((c) => {
+      if (!map[c.userId]) {
+        map[c.userId] = { userId: c.userId, name: c.complainant, purok: c.purok, complaints: [], unreadCount: 0 };
+      }
+      map[c.userId].complaints.push(c);
+      map[c.userId].unreadCount += c.unreadCount;
+    });
+    const list = Object.values(map);
+    list.sort((a, b) => {
+      if (a.unreadCount !== b.unreadCount) return b.unreadCount - a.unreadCount;
+      return a.name.localeCompare(b.name);
+    });
+    return list;
+  }, [filteredConversations]);
+
+  // ── Complaints for the selected user ───────────────────────────────────────
+  const userComplaints = useMemo(() => {
+    if (!selectedUser) return [];
+    return filteredConversations.filter((c) => c.userId === selectedUser.userId);
+  }, [filteredConversations, selectedUser]);
 
   // ── Open conversation + mark messages read ──────────────────────────────────
   const openConversation = async (conversation) => {
@@ -280,68 +305,136 @@ const MessageTable = () => {
 
         {/* Table */}
         <div className="rounded-2xl border border-white/60 bg-white/80 backdrop-blur shadow-2xl overflow-hidden">
+
+          {/* Back button when viewing a user's complaints */}
+          {selectedUser && (
+            <div className="px-6 py-3 border-b border-gray-100 bg-slate-50 flex items-center gap-3">
+              <button onClick={() => setSelectedUser(null)}
+                className="text-indigo-600 hover:text-indigo-800 font-extrabold text-sm flex items-center gap-1 transition">
+                ← Back to Users
+              </button>
+              <span className="text-gray-400">|</span>
+              <span className="text-sm font-bold text-gray-800">{selectedUser.name}</span>
+              <span className="text-xs text-gray-400 font-semibold">— {userComplaints.length} complaint{userComplaints.length !== 1 ? "s" : ""}</span>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left">
-              <thead className="bg-white sticky top-0 z-10">
-                <tr className="border-b border-gray-200">
-                  {["Complainant", "Purok", "Issue Type", "Description", "Last Message", "Status"].map((h) => (
-                    <th key={h} className="px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-gray-600">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredConversations.map((c, idx) => {
-                  const status = getStatusDisplay(c.status);
-                  return (
-                    <tr key={c.id}
+            {!selectedUser ? (
+              /* ── User List ───────────────────────────────────────────── */
+              <table className="w-full min-w-[600px] text-left">
+                <thead className="bg-white sticky top-0 z-10">
+                  <tr className="border-b border-gray-200">
+                    {["Complainant", "Purok", "Complaints", "Unread", ""].map((h) => (
+                      <th key={h} className="px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-gray-600">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedByUser.map((u, idx) => (
+                    <tr key={u.userId}
                       className={`border-b border-gray-100 transition cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-indigo-50/50`}
-                      onClick={() => openConversation(c)}>
+                      onClick={() => setSelectedUser({ userId: u.userId, name: u.name })}>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900">{c.complainant}</span>
-                          {c.unreadCount > 0 && (
+                          <span className="font-bold text-gray-900">{u.name}</span>
+                          {u.unreadCount > 0 && (
                             <span className="relative flex items-center justify-center">
                               <span className="animate-ping absolute inline-flex h-5 w-5 rounded-full bg-red-400 opacity-70" />
                               <span className="relative inline-flex rounded-full h-5 w-5 bg-red-500 text-white text-xs font-extrabold items-center justify-center shadow">
-                                {c.unreadCount}
+                                {u.unreadCount}
                               </span>
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 font-semibold text-gray-800">Purok {c.purok}</td>
+                      <td className="px-6 py-4 font-semibold text-gray-800">Purok {u.purok}</td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border ${getIssueColor(c.issueType)}`}>
-                          {c.issueType}
+                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold border bg-indigo-100 text-indigo-800 border-indigo-200">
+                          {u.complaints.length}
                         </span>
                       </td>
-                      <td className="px-6 py-4 max-w-xs truncate" title={c.description}>
-                        <span className="text-sm text-gray-700">{c.description}</span>
-                      </td>
-                      <td className="px-6 py-4 max-w-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-sm text-gray-700" title={c.lastMessage}>{c.lastMessage}</span>
-                          {c.status === "unread" && <FiBell className="text-red-500 animate-pulse shrink-0" size={16} />}
-                        </div>
-                      </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border ${status.color}`}>
-                          {status.text}
-                        </span>
+                        {u.unreadCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold border bg-yellow-100 text-yellow-800 border-yellow-200">
+                            <FiBell className="text-red-500" size={12} /> {u.unreadCount}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 font-semibold">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <span className="text-indigo-500 text-xs font-bold">View →</span>
                       </td>
                     </tr>
-                  );
-                })}
-                {filteredConversations.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="text-center py-10 text-gray-500 font-semibold">No messages found</td>
+                  ))}
+                  {groupedByUser.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-center py-10 text-gray-500 font-semibold">No users found</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              /* ── Complaints for selected user ────────────────────────── */
+              <table className="w-full min-w-[980px] text-left">
+                <thead className="bg-white sticky top-0 z-10">
+                  <tr className="border-b border-gray-200">
+                    {["Issue Type", "Description", "Last Message", "Status"].map((h) => (
+                      <th key={h} className="px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-gray-600">{h}</th>
+                    ))}
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {userComplaints.map((c, idx) => {
+                    const status = getStatusDisplay(c.status);
+                    return (
+                      <tr key={c.id}
+                        className={`border-b border-gray-100 transition cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-indigo-50/50`}
+                        onClick={() => openConversation(c)}>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border ${getIssueColor(c.issueType)}`}>
+                            {c.issueType}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 max-w-xs truncate" title={c.description}>
+                          <span className="text-sm text-gray-700">{c.description}</span>
+                        </td>
+                        <td className="px-6 py-4 max-w-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm text-gray-700" title={c.lastMessage}>{c.lastMessage}</span>
+                            {c.status === "unread" && <FiBell className="text-red-500 animate-pulse shrink-0" size={16} />}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border ${status.color}`}>
+                              {status.text}
+                            </span>
+                            {c.unreadCount > 0 && (
+                              <span className="relative flex items-center justify-center">
+                                <span className="animate-ping absolute inline-flex h-4 w-4 rounded-full bg-red-400 opacity-70" />
+                                <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-white text-[10px] font-extrabold items-center justify-center shadow">
+                                  {c.unreadCount}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {userComplaints.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="text-center py-10 text-gray-500 font-semibold">No complaints found</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
           <div className="px-6 py-4 text-xs text-gray-500 font-semibold border-t border-gray-100">
-            Tip: Unread conversations are prioritized at the top.
+            {!selectedUser ? "Click a user to view their complaints." : "Click a complaint to open the conversation."}
           </div>
         </div>
 
@@ -401,7 +494,7 @@ const MessageTable = () => {
                         <div className={`max-w-[78%] rounded-2xl px-4 py-3 shadow-sm border ${
                           isAdmin ? "bg-indigo-600 text-white border-indigo-600" : "bg-slate-100 text-gray-900 border-slate-200"
                         }`}>
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.message}</p>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap wrap-break-word overflow-hidden">{m.message}</p>
                           <div className="mt-2 flex items-center justify-between gap-4">
                             <span className={`text-[11px] font-semibold ${isAdmin ? "text-indigo-100" : "text-gray-500"}`}>
                               {formatTimestamp(m.timestamp)}
@@ -424,20 +517,29 @@ const MessageTable = () => {
               <div className="p-5 border-t bg-white shrink-0">
                 <div className="flex gap-2">
                   <textarea rows={3} value={reply}
-                    onChange={(e) => setReply(e.target.value)}
+                    onChange={(e) => { if (e.target.value.length <= 500) setReply(e.target.value); }}
                     onKeyDown={handleKeyDown}
+                    maxLength={500}
                     placeholder={`Reply to ${selectedConversation.complainant}...`}
                     className="flex-1 rounded-xl border border-gray-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   />
                   <button onClick={handleSendReply}
-                    className="bg-indigo-600 text-white px-5 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition font-extrabold shadow-md">
+                    disabled={!reply.trim()}
+                    className={`px-5 rounded-xl flex items-center gap-2 transition font-extrabold shadow-md ${
+                      reply.trim() ? "bg-indigo-600 text-white hover:bg-indigo-700" : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    }`}>
                     <FiSend /> Send
                   </button>
                 </div>
-                <p className="mt-2 text-[11px] text-gray-500 font-semibold">
-                  Press <span className="font-extrabold">Enter</span> to send •{" "}
-                  <span className="font-extrabold">Shift + Enter</span> for new line
-                </p>
+                <div className="mt-2 flex items-center justify-between">
+                  <p className="text-[11px] text-gray-500 font-semibold">
+                    Press <span className="font-extrabold">Enter</span> to send •{" "}
+                    <span className="font-extrabold">Shift + Enter</span> for new line
+                  </p>
+                  <span className={`text-[11px] font-bold ${reply.length >= 500 ? "text-red-500" : "text-gray-400"}`}>
+                    {reply.length}/500
+                  </span>
+                </div>
               </div>
             </div>
           </div>

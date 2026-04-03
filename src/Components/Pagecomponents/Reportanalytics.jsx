@@ -2,10 +2,11 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   TrendingUp, Clock, BarChart3, Calendar,
-  AlertCircle, CheckCircle, PieChart, Activity, Sparkles,
+  AlertCircle, CheckCircle, PieChart, Activity, Sparkles, Layers,
 } from "lucide-react";
 import {
-  BarChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid,
+  BarChart, Bar, Line, LineChart, AreaChart, Area,
+  XAxis, YAxis, Tooltip, CartesianGrid,
   Legend, ResponsiveContainer, ComposedChart,
   PieChart as RPieChart, Pie, Cell,
 } from "recharts";
@@ -50,11 +51,11 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 /* ── UI helpers ──────────────────────────────────────────────────────────────*/
-const Panel = ({ icon, title, subtitle, rightSlot, children }) => (
+const Panel = ({ icon, title, subtitle, rightSlot, headerExtra, children }) => (
   <div className="relative overflow-hidden rounded-2xl border border-white/60 bg-white/80 backdrop-blur shadow-xl">
     <div className="absolute -top-28 -right-28 w-72 h-72 rounded-full bg-indigo-500/10 blur-3xl" />
     <div className="absolute -bottom-28 -left-28 w-72 h-72 rounded-full bg-pink-500/10 blur-3xl" />
-    <div className="relative px-6 py-5 border-b border-gray-200 flex items-start justify-between gap-4">
+    <div className="relative px-6 py-5 border-b border-gray-200 flex flex-wrap items-start justify-between gap-4">
       <div className="flex items-start gap-3">
         <div className="shrink-0 w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md">
           {icon}
@@ -64,7 +65,10 @@ const Panel = ({ icon, title, subtitle, rightSlot, children }) => (
           {subtitle && <p className="text-xs md:text-sm text-gray-600 font-semibold mt-1">{subtitle}</p>}
         </div>
       </div>
-      {rightSlot && <div className="shrink-0">{rightSlot}</div>}
+      <div className="flex items-center gap-3 flex-wrap">
+        {headerExtra}
+        {rightSlot && <div className="shrink-0">{rightSlot}</div>}
+      </div>
     </div>
     <div className="relative p-6">{children}</div>
   </div>
@@ -112,6 +116,8 @@ const Segmented = ({ value, onChange }) => (
 /* ── Main Component ──────────────────────────────────────────────────────────*/
 const ReportAnalytics = () => {
   const [view, setView] = useState("monthly");
+  const [chartMode1, setChartMode1] = useState("bar");   // Figure 1
+  const [chartMode3, setChartMode3] = useState("bar");   // Figure 3
   const [selectedMonth, setSelectedMonth] = useState("January");
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(); d.setMonth(0); d.setDate(1);
@@ -446,6 +452,7 @@ const ReportAnalytics = () => {
           subtitle={view === "monthly"
             ? "Monthly distribution of urgent and non-urgent complaints (date-filtered)"
             : `Weekly breakdown for ${selectedMonth}`}
+          headerExtra={<ChartToggle value={chartMode1} onChange={setChartMode1} />}
           rightSlot={
             <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-xs font-extrabold text-gray-700 shadow-sm">
               <Clock size={14} className="text-indigo-600" />
@@ -455,17 +462,41 @@ const ReportAnalytics = () => {
         >
           <div className="h-[420px] w-full rounded-2xl bg-linear-to-b from-slate-50 to-white p-4 border border-gray-200">
             <ResponsiveContainer>
-              <ComposedChart data={graphData} margin={{ top: 18, right: 20, left: 0, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="name" stroke="#4B5563" tick={{ fontSize: 12, fontWeight: 700 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
-                <YAxis stroke="#4B5563" tick={{ fontSize: 12, fontWeight: 700 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} allowDecimals={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ paddingTop: 14, fontWeight: 800 }} iconType="circle" />
-                <Bar dataKey="nonUrgent" fill="#F59E0B" name="Non-Urgent" radius={[10, 10, 0, 0]} />
-                <Bar dataKey="urgent" fill="#EF4444" name="Urgent" radius={[10, 10, 0, 0]} />
-                <Line type="monotone" dataKey="total" stroke="#4F46E5" strokeWidth={3} name="Total"
-                  dot={{ fill: "#4F46E5", r: 4, strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 6 }} />
-              </ComposedChart>
+              {chartMode1 === "bar" ? (
+                <ComposedChart data={graphData} margin={{ top: 18, right: 20, left: 0, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis dataKey="name" stroke="#4B5563" tick={{ fontSize: 12, fontWeight: 700 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                  <YAxis stroke="#4B5563" tick={{ fontSize: 12, fontWeight: 700 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} allowDecimals={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ paddingTop: 14, fontWeight: 800 }} iconType="circle" />
+                  <Bar dataKey="nonUrgent" fill="#F59E0B" name="Non-Urgent" radius={[10, 10, 0, 0]} />
+                  <Bar dataKey="urgent" fill="#EF4444" name="Urgent" radius={[10, 10, 0, 0]} />
+                  <Line type="monotone" dataKey="total" stroke="#4F46E5" strokeWidth={3} name="Total"
+                    dot={{ fill: "#4F46E5", r: 4, strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 6 }} />
+                </ComposedChart>
+              ) : chartMode1 === "line" ? (
+                <LineChart data={graphData} margin={{ top: 18, right: 20, left: 0, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis dataKey="name" stroke="#4B5563" tick={{ fontSize: 12, fontWeight: 700 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                  <YAxis stroke="#4B5563" tick={{ fontSize: 12, fontWeight: 700 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} allowDecimals={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ paddingTop: 14, fontWeight: 800 }} iconType="circle" />
+                  <Line type="monotone" dataKey="nonUrgent" stroke="#F59E0B" strokeWidth={3} name="Non-Urgent" dot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="urgent" stroke="#EF4444" strokeWidth={3} name="Urgent" dot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="total" stroke="#4F46E5" strokeWidth={3} name="Total" dot={{ r: 5 }} />
+                </LineChart>
+              ) : (
+                <AreaChart data={graphData} margin={{ top: 18, right: 20, left: 0, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis dataKey="name" stroke="#4B5563" tick={{ fontSize: 12, fontWeight: 700 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                  <YAxis stroke="#4B5563" tick={{ fontSize: 12, fontWeight: 700 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} allowDecimals={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ paddingTop: 14, fontWeight: 800 }} iconType="circle" />
+                  <Area type="monotone" dataKey="nonUrgent" fill="#F59E0B" fillOpacity={0.15} stroke="#F59E0B" strokeWidth={2} name="Non-Urgent" />
+                  <Area type="monotone" dataKey="urgent" fill="#EF4444" fillOpacity={0.15} stroke="#EF4444" strokeWidth={2} name="Urgent" />
+                  <Area type="monotone" dataKey="total" fill="#4F46E5" fillOpacity={0.1} stroke="#4F46E5" strokeWidth={2} name="Total" />
+                </AreaChart>
+              )}
             </ResponsiveContainer>
           </div>
         </Panel>
@@ -495,18 +526,37 @@ const ReportAnalytics = () => {
             </div>
           </Panel>
 
-          <Panel icon={<BarChart3 size={18} />} title="Figure 3: Complaint Category Distribution" subtitle="Top complaint types by count">
+          <Panel icon={<BarChart3 size={18} />} title="Figure 3: Complaint Category Distribution" subtitle="Top complaint types by count"
+            headerExtra={<ChartToggle value={chartMode3} onChange={setChartMode3} />}>
             <div className="h-72 rounded-2xl border border-gray-200 bg-linear-to-b from-slate-50 to-white p-4">
               <ResponsiveContainer>
-                <BarChart data={categoryData} layout="vertical" margin={{ top: 8, right: 10, left: 10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tick={{ fontSize: 12, fontWeight: 700 }} allowDecimals={false} />
-                  <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 11, fontWeight: 700 }} />
-                  <Tooltip />
-                  <Bar dataKey="value" radius={[0, 8, 8, 0]}>
-                    {categoryData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Bar>
-                </BarChart>
+                {chartMode3 === "bar" ? (
+                  <BarChart data={categoryData} layout="vertical" margin={{ top: 8, right: 10, left: 10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" tick={{ fontSize: 12, fontWeight: 700 }} allowDecimals={false} />
+                    <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 11, fontWeight: 700 }} />
+                    <Tooltip />
+                    <Bar dataKey="value" radius={[0, 8, 8, 0]}>
+                      {categoryData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                ) : chartMode3 === "line" ? (
+                  <LineChart data={categoryData} margin={{ top: 8, right: 10, left: 10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 700 }} />
+                    <YAxis tick={{ fontSize: 12, fontWeight: 700 }} allowDecimals={false} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="value" stroke="#4F46E5" strokeWidth={3} dot={{ r: 6, fill: "#4F46E5" }} />
+                  </LineChart>
+                ) : (
+                  <AreaChart data={categoryData} margin={{ top: 8, right: 10, left: 10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 700 }} />
+                    <YAxis tick={{ fontSize: 12, fontWeight: 700 }} allowDecimals={false} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="value" fill="#4F46E5" fillOpacity={0.15} stroke="#4F46E5" strokeWidth={2} />
+                  </AreaChart>
+                )}
               </ResponsiveContainer>
             </div>
           </Panel>
@@ -567,3 +617,28 @@ const ReportAnalytics = () => {
 };
 
 export default ReportAnalytics;
+
+const ChartToggle = ({ value, onChange }) => {
+  const modes = [
+    { key: "bar",  label: "Bar",  icon: <BarChart3 size={14} /> },
+    { key: "line", label: "Line", icon: <TrendingUp size={14} /> },
+    { key: "area", label: "Area", icon: <Layers size={14} /> },
+  ];
+  return (
+    <div className="inline-flex rounded-xl border border-gray-200 bg-slate-100 p-1 gap-0.5">
+      {modes.map((m) => (
+        <button
+          key={m.key}
+          onClick={() => onChange(m.key)}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${
+            value === m.key
+              ? "bg-white text-indigo-700 shadow-sm border border-gray-200"
+              : "text-gray-500 hover:text-gray-800"
+          }`}
+        >
+          {m.icon} {m.label}
+        </button>
+      ))}
+    </div>
+  );
+};

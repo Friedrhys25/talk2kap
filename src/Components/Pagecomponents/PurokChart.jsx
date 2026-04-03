@@ -8,6 +8,10 @@ import React, { useMemo, useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -18,7 +22,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { Users, BarChart3, ClipboardList, Home, Vote, UserCheck, Loader2 } from "lucide-react";
+import { Users, BarChart3, ClipboardList, Home, Vote, UserCheck, Loader2, TrendingUp, Layers } from "lucide-react";
 import { collection, getDocs } from "firebase/firestore";
 import { firestore } from "../../firebaseConfig";
 
@@ -92,6 +96,8 @@ const useFirestoreUsersByPurok = () => {
 // ─────────────────────────────────────────────
 const PurokChart = () => {
   const { usersByPurok, totalUsers, loading, error } = useFirestoreUsersByPurok();
+  const [chartMode1, setChartMode1] = useState("bar");   // Figure 1
+  const [chartMode3, setChartMode3] = useState("bar");   // Figure 3
 
   const totals = useMemo(() => ({
     population: purokData.reduce((sum, p) => sum + p.population, 0),
@@ -184,25 +190,50 @@ const PurokChart = () => {
 
         {/* ── Charts Row 1 ── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-          {/* Bar Panel */}
+          {/* Demographics Panel */}
           <Panel
             title="Figure 1: Purok Demographics"
             icon={<BarChart3 className="text-indigo-600" size={22} />}
             badge="Overview"
+            headerExtra={<ChartToggle value={chartMode1} onChange={setChartMode1} />}
           >
             <div className="rounded-2xl border border-gray-200 bg-linear-to-b from-slate-50 to-white p-4">
               <div className="h-[340px]">
                 <ResponsiveContainer>
-                  <BarChart data={purokData} margin={{ top: 18, right: 24, left: 6, bottom: 12 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 800 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
-                    <YAxis tick={{ fontSize: 13, fontWeight: 800 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
-                    <Tooltip content={<PrettyTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: 13, fontWeight: 800 }} iconType="circle" />
-                    <Bar dataKey="population" fill="#4F46E5" radius={[10, 10, 0, 0]} barSize={22} />
-                    <Bar dataKey="households" fill="#10B981" radius={[10, 10, 0, 0]} barSize={22} />
-                    <Bar dataKey="registered_voters" fill="#F59E0B" radius={[10, 10, 0, 0]} barSize={22} />
-                  </BarChart>
+                  {chartMode1 === "bar" ? (
+                    <BarChart data={purokData} margin={{ top: 18, right: 24, left: 6, bottom: 12 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 800 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                      <YAxis tick={{ fontSize: 13, fontWeight: 800 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                      <Tooltip content={<PrettyTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: 13, fontWeight: 800 }} iconType="circle" />
+                      <Bar dataKey="population" fill="#4F46E5" radius={[10, 10, 0, 0]} barSize={22} />
+                      <Bar dataKey="households" fill="#10B981" radius={[10, 10, 0, 0]} barSize={22} />
+                      <Bar dataKey="registered_voters" fill="#F59E0B" radius={[10, 10, 0, 0]} barSize={22} />
+                    </BarChart>
+                  ) : chartMode1 === "line" ? (
+                    <LineChart data={purokData} margin={{ top: 18, right: 24, left: 6, bottom: 12 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 800 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                      <YAxis tick={{ fontSize: 13, fontWeight: 800 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                      <Tooltip content={<PrettyTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: 13, fontWeight: 800 }} iconType="circle" />
+                      <Line type="monotone" dataKey="population" stroke="#4F46E5" strokeWidth={3} dot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="households" stroke="#10B981" strokeWidth={3} dot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="registered_voters" stroke="#F59E0B" strokeWidth={3} dot={{ r: 5 }} />
+                    </LineChart>
+                  ) : (
+                    <AreaChart data={purokData} margin={{ top: 18, right: 24, left: 6, bottom: 12 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 800 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                      <YAxis tick={{ fontSize: 13, fontWeight: 800 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                      <Tooltip content={<PrettyTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: 13, fontWeight: 800 }} iconType="circle" />
+                      <Area type="monotone" dataKey="population" fill="#4F46E5" fillOpacity={0.15} stroke="#4F46E5" strokeWidth={2} />
+                      <Area type="monotone" dataKey="households" fill="#10B981" fillOpacity={0.15} stroke="#10B981" strokeWidth={2} />
+                      <Area type="monotone" dataKey="registered_voters" fill="#F59E0B" fillOpacity={0.15} stroke="#F59E0B" strokeWidth={2} />
+                    </AreaChart>
+                  )}
                 </ResponsiveContainer>
               </div>
             </div>
@@ -258,6 +289,7 @@ const PurokChart = () => {
           title="Figure 3: Registered System Users per Purok"
           icon={<UserCheck className="text-purple-600" size={22} />}
           badge="Live · Firestore"
+          headerExtra={!loading && !error && <ChartToggle value={chartMode3} onChange={setChartMode3} />}
         >
           {loading ? (
             <div className="flex flex-col items-center justify-center h-[300px] gap-4 text-gray-500">
@@ -274,48 +306,39 @@ const PurokChart = () => {
               <div className="rounded-2xl border border-gray-200 bg-linear-to-b from-slate-50 to-white p-4">
                 <div className="h-[340px]">
                   <ResponsiveContainer>
-                    <BarChart
-                      data={usersByPurok}
-                      margin={{ top: 24, right: 24, left: 10, bottom: 12 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                      <XAxis
-                        dataKey="name"
-                        tick={{ fontSize: 13, fontWeight: 800, fill: "#374151" }}
-                        axisLine={{ stroke: "#E5E7EB" }}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        allowDecimals={false}
-                        tick={{ fontSize: 13, fontWeight: 800, fill: "#374151" }}
-                        axisLine={{ stroke: "#E5E7EB" }}
-                        tickLine={false}
-                        label={{
-                          value: "Users",
-                          angle: -90,
-                          position: "insideLeft",
-                          offset: 12,
-                          style: { fontSize: 12, fontWeight: 700, fill: "#6B7280" },
-                        }}
-                      />
-                      <Tooltip content={<PrettyTooltip />} />
-                      <Bar
-                        dataKey="users"
-                        name="System Users"
-                        radius={[10, 10, 0, 0]}
-                        barSize={42}
-                        label={{
-                          position: "top",
-                          fontSize: 13,
-                          fontWeight: 800,
-                          fill: "#4F46E5",
-                        }}
-                      >
-                        {usersByPurok.map((_, index) => (
-                          <Cell key={index} fill={colors[index % colors.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
+                    {chartMode3 === "bar" ? (
+                      <BarChart data={usersByPurok} margin={{ top: 24, right: 24, left: 10, bottom: 12 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                        <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 800, fill: "#374151" }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 13, fontWeight: 800, fill: "#374151" }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false}
+                          label={{ value: "Users", angle: -90, position: "insideLeft", offset: 12, style: { fontSize: 12, fontWeight: 700, fill: "#6B7280" } }} />
+                        <Tooltip content={<PrettyTooltip />} />
+                        <Bar dataKey="users" name="System Users" radius={[10, 10, 0, 0]} barSize={42}
+                          label={{ position: "top", fontSize: 13, fontWeight: 800, fill: "#4F46E5" }}>
+                          {usersByPurok.map((_, index) => (
+                            <Cell key={index} fill={colors[index % colors.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    ) : chartMode3 === "line" ? (
+                      <LineChart data={usersByPurok} margin={{ top: 24, right: 24, left: 10, bottom: 12 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                        <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 800, fill: "#374151" }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 13, fontWeight: 800, fill: "#374151" }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false}
+                          label={{ value: "Users", angle: -90, position: "insideLeft", offset: 12, style: { fontSize: 12, fontWeight: 700, fill: "#6B7280" } }} />
+                        <Tooltip content={<PrettyTooltip />} />
+                        <Line type="monotone" dataKey="users" name="System Users" stroke="#4F46E5" strokeWidth={3} dot={{ r: 6, fill: "#4F46E5" }} />
+                      </LineChart>
+                    ) : (
+                      <AreaChart data={usersByPurok} margin={{ top: 24, right: 24, left: 10, bottom: 12 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                        <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 800, fill: "#374151" }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 13, fontWeight: 800, fill: "#374151" }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false}
+                          label={{ value: "Users", angle: -90, position: "insideLeft", offset: 12, style: { fontSize: 12, fontWeight: 700, fill: "#6B7280" } }} />
+                        <Tooltip content={<PrettyTooltip />} />
+                        <Area type="monotone" dataKey="users" name="System Users" fill="#4F46E5" fillOpacity={0.15} stroke="#4F46E5" strokeWidth={2} />
+                      </AreaChart>
+                    )}
                   </ResponsiveContainer>
                 </div>
               </div>
@@ -428,18 +451,21 @@ export default PurokChart;
    UI Helpers
 ======================= */
 
-const Panel = ({ title, icon, badge, children }) => (
+const Panel = ({ title, icon, badge, headerExtra, children }) => (
   <div className="bg-white/85 backdrop-blur rounded-3xl shadow-2xl border border-white/60 overflow-hidden">
-    <div className="px-6 py-5 md:px-7 md:py-5 border-b border-gray-200 flex items-center justify-between gap-3">
+    <div className="px-6 py-5 md:px-7 md:py-5 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
       <h3 className="text-lg md:text-xl font-extrabold text-gray-900 flex items-center gap-3">
         {icon}
         {title}
       </h3>
-      {badge && (
-        <span className="text-xs font-extrabold text-gray-700 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-sm">
-          {badge}
-        </span>
-      )}
+      <div className="flex items-center gap-3">
+        {headerExtra}
+        {badge && (
+          <span className="text-xs font-extrabold text-gray-700 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-sm">
+            {badge}
+          </span>
+        )}
+      </div>
     </div>
     <div className="p-6 md:p-7">{children}</div>
   </div>
@@ -500,6 +526,31 @@ const PrettyTooltip = ({ active, payload, label }) => {
           </div>
         ))}
       </div>
+    </div>
+  );
+};
+
+const ChartToggle = ({ value, onChange }) => {
+  const modes = [
+    { key: "bar",  label: "Bar",  icon: <BarChart3 size={14} /> },
+    { key: "line", label: "Line", icon: <TrendingUp size={14} /> },
+    { key: "area", label: "Area", icon: <Layers size={14} /> },
+  ];
+  return (
+    <div className="inline-flex rounded-xl border border-gray-200 bg-slate-100 p-1 gap-0.5">
+      {modes.map((m) => (
+        <button
+          key={m.key}
+          onClick={() => onChange(m.key)}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${
+            value === m.key
+              ? "bg-white text-indigo-700 shadow-sm border border-gray-200"
+              : "text-gray-500 hover:text-gray-800"
+          }`}
+        >
+          {m.icon} {m.label}
+        </button>
+      ))}
     </div>
   );
 };
