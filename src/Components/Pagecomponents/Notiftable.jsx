@@ -1,8 +1,9 @@
 ﻿// Notiftable.jsx
-// Flow: pending → deploy tanod → in-progress → Mark as Resolved (direct, no feedback input)
+// Flow: pending → deploy tanods (min 2) → in-progress → Mark as Resolved (direct, no feedback input)
 // Admin views citizen-submitted feedback via "View Feedback" button on resolved complaints
-// On deploy:  sets deploymentStatus & deployedTo on tanod, sets deployedTanodUid/Name on complaint
-// On resolve: clears tanod deployment, updates complaint status to "resolved"
+// On deploy:  sets deploymentStatus & deployedTo (with coDeployedTanods) on each tanod,
+//             sets deployedTanods array + deployedTanodUid/Name on complaint
+// On resolve: clears all tanods' deployment, updates complaint status to "resolved"
 import React, { useState, useEffect, useMemo } from "react";
 import {
   FiAlertTriangle, FiClock, FiSearch, FiX,
@@ -84,7 +85,19 @@ const ConfirmResolveModal = ({ complaint, onConfirm, onCancel, resolving }) => {
             </p>
           </div>
 
-          {complaint.deployedTanodName && (
+          {complaint.deployedTanods && complaint.deployedTanods.length > 0 ? (
+            <div className="space-y-2">
+              {complaint.deployedTanods.map((t) => (
+                <div key={t.uid} className="flex items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+                  <div className="bg-indigo-600 text-white p-2 rounded-xl shrink-0"><FiShield size={15} /></div>
+                  <div>
+                    <p className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider">Deployed Tanod</p>
+                    <p className="text-sm font-bold text-gray-800 mt-0.5">{t.name}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : complaint.deployedTanodName && (
             <div className="flex items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3">
               <div className="bg-indigo-600 text-white p-2 rounded-xl shrink-0"><FiShield size={15} /></div>
               <div>
@@ -140,11 +153,12 @@ const Notiftable = () => {
   const [tanods, setTanods]               = useState([]);
   const [showDeployModal, setShowDeployModal] = useState(false);
   const [deployTarget, setDeployTarget]   = useState(null);
-  const [selectedTanod, setSelectedTanod] = useState("");
+  const [selectedTanods, setSelectedTanods] = useState(new Set());
   const [deploying, setDeploying]         = useState(false);
   const [tanodSearch, setTanodSearch]     = useState("");
   const [tanodPage, setTanodPage]         = useState(1);
   const TANODS_PER_PAGE = 5;
+  const MIN_TANODS = 2;
 
   // ── View Feedback (read-only) ─────────────────────────────────────────────
   const [showViewFeedbackModal, setShowViewFeedbackModal] = useState(false);
@@ -213,6 +227,7 @@ const Notiftable = () => {
                     status:            c.status || "pending",
                     timestamp:         timestampStr,
                     _rawTimestamp:     rawDate,
+                    deployedTanods:    c.deployedTanods   || [],
                     deployedTanodUid:  c.deployedTanodUid  || null,
                     deployedTanodName: c.deployedTanodName || null,
                     hasFeedback:       c.hasFeedback       || false,
@@ -302,10 +317,19 @@ const Notiftable = () => {
   // ── Deploy tanod ───────────────────────────────────────────────────────────
   const openDeployModal = (complaint) => {
     setDeployTarget(complaint);
-    setSelectedTanod("");
+    setSelectedTanods(new Set());
     setTanodSearch("");
     setTanodPage(1);
     setShowDeployModal(true);
+  };
+
+  const toggleTanod = (uid) => {
+    setSelectedTanods((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
   };
 
   const filteredTanods = useMemo(() => {
@@ -322,44 +346,58 @@ const Notiftable = () => {
   );
 
   const confirmDeploy = async () => {
-    if (!selectedTanod || !deployTarget) return;
+    if (selectedTanods.size < MIN_TANODS || !deployTarget) return;
     setDeploying(true);
     try {
-      const tanod     = tanods.find((t) => t.uid === selectedTanod);
-      const tanodName = tanod?.fullName || "";
+      const selectedArr = [...selectedTanods];
+      const deployedTanods = selectedArr.map((uid) => {
+        const t = tanods.find((x) => x.uid === uid);
+        return { uid, name: t?.fullName || "" };
+      });
+      const deployedTanodNames = deployedTanods.map((t) => t.name).join(", ");
 
-      // Update complaint: set status to in-progress + deployed tanod info
+      // Update complaint: set status to in-progress + deployed tanods array
       await updateDoc(
         doc(firestore, "users", deployTarget.userId, "userComplaints", deployTarget.complaintKey),
-        { deployedTanodUid: selectedTanod, deployedTanodName: tanodName, status: "in-progress" }
+        {
+          deployedTanods,
+          deployedTanodUid: deployedTanods[0].uid,
+          deployedTanodName: deployedTanodNames,
+          status: "in-progress",
+        }
       );
 
-      // Update tanod: mark as deployed
-      await updateDoc(doc(firestore, "employee", selectedTanod), {
-        deploymentStatus: "deployed",
-        deployedTo: {
-          complaintKey:    deployTarget.complaintKey,
-          userId:          deployTarget.userId,
-          complainantName: deployTarget.name,
-          type:            deployTarget.type,
-          incidentPurok:   deployTarget.incidentPurok,
-          description:     deployTarget.message,
-          deployedAt:      new Date().toISOString(),
-        },
-      });
+      // Update each tanod: mark as deployed with co-deployed info
+      const deployedAt = new Date().toISOString();
+      for (const { uid, name } of deployedTanods) {
+        const coDeployedTanods = deployedTanods.filter((t) => t.uid !== uid);
+        await updateDoc(doc(firestore, "employee", uid), {
+          deploymentStatus: "deployed",
+          deployedTo: {
+            complaintKey:    deployTarget.complaintKey,
+            userId:          deployTarget.userId,
+            complainantName: deployTarget.name,
+            type:            deployTarget.type,
+            incidentPurok:   deployTarget.incidentPurok,
+            description:     deployTarget.message,
+            deployedAt,
+            coDeployedTanods,
+          },
+        });
+      }
 
       const patch = (c) =>
         c.complaintKey === deployTarget.complaintKey
-          ? { ...c, deployedTanodUid: selectedTanod, deployedTanodName: tanodName, status: "in-progress" }
+          ? { ...c, deployedTanods, deployedTanodUid: deployedTanods[0].uid, deployedTanodName: deployedTanodNames, status: "in-progress" }
           : c;
       setNotifications((prev) => prev.map(patch));
       setSelectedComplaint((prev) => prev ? patch(prev) : prev);
       setShowDeployModal(false);
       setDeployTarget(null);
-      setSelectedTanod("");
+      setSelectedTanods(new Set());
     } catch (err) {
       console.error(err);
-      alert("Failed to deploy tanod.");
+      alert("Failed to deploy tanods.");
     } finally {
       setDeploying(false);
     }
@@ -381,15 +419,23 @@ const Notiftable = () => {
         { status: "resolved", resolvedAt: serverTimestamp() }
       );
 
-      // Clear tanod deployment status & save to deployment history
-      if (resolvingComplaint.deployedTanodUid) {
-        const tanodRef = doc(firestore, "employee", resolvingComplaint.deployedTanodUid);
+      // Clear all deployed tanods' deployment status & save to history
+      const tanodsToResolve = resolvingComplaint.deployedTanods || [];
+      // Fallback for legacy single-tanod complaints
+      if (tanodsToResolve.length === 0 && resolvingComplaint.deployedTanodUid) {
+        tanodsToResolve.push({ uid: resolvingComplaint.deployedTanodUid, name: resolvingComplaint.deployedTanodName });
+      }
+
+      for (const { uid } of tanodsToResolve) {
+        const tanodRef = doc(firestore, "employee", uid);
         const tanodSnap = await getDoc(tanodRef);
         const deployedTo = tanodSnap.exists() ? tanodSnap.data().deployedTo : null;
 
+        const coDeployedTanods = tanodsToResolve.filter((t) => t.uid !== uid);
+
         // Save resolved deployment to history subcollection
         await setDoc(
-          doc(firestore, "employee", resolvingComplaint.deployedTanodUid, "deploymentHistory", resolvingComplaint.complaintKey),
+          doc(firestore, "employee", uid, "deploymentHistory", resolvingComplaint.complaintKey),
           {
             complaintKey:    resolvingComplaint.complaintKey,
             userId:          resolvingComplaint.userId,
@@ -402,6 +448,7 @@ const Notiftable = () => {
             status:          "resolved",
             tanodRating:     null,
             tanodComment:    null,
+            coDeployedTanods,
           }
         );
 
@@ -645,7 +692,16 @@ const Notiftable = () => {
                           <p className="text-sm font-semibold text-gray-700 line-clamp-1">{n.message}</p>
                         </td>
                         <td className="px-5 py-4">
-                          {n.deployedTanodName
+                          {n.deployedTanods && n.deployedTanods.length > 0
+                            ? <div className="flex flex-col gap-1">
+                                {n.deployedTanods.map((t) => (
+                                  <div key={t.uid} className="flex items-center gap-1.5">
+                                    <FiShield className="text-indigo-500 shrink-0" size={14} />
+                                    <span className="text-xs font-bold text-indigo-700">{t.name}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            : n.deployedTanodName
                             ? <div className="flex items-center gap-1.5"><FiShield className="text-indigo-500 shrink-0" size={14} /><span className="text-xs font-bold text-indigo-700">{n.deployedTanodName}</span></div>
                             : <span className="text-xs text-gray-400 font-semibold italic">Unassigned</span>}
                         </td>
@@ -701,7 +757,15 @@ const Notiftable = () => {
                       {getUrgencyDisplay(selectedComplaint.label).text}
                     </div>
                   </div>
-                  {selectedComplaint.deployedTanodName && (
+                  {selectedComplaint.deployedTanods && selectedComplaint.deployedTanods.length > 0 ? (
+                    selectedComplaint.deployedTanods.map((t) => (
+                      <div key={t.uid} className="rounded-xl px-4 py-3 bg-indigo-50 ring-1 ring-indigo-200">
+                        <div className="flex items-center gap-2 text-sm font-bold text-indigo-800">
+                          <FiShield size={18} />Deployed: {t.name}
+                        </div>
+                      </div>
+                    ))
+                  ) : selectedComplaint.deployedTanodName && (
                     <div className="rounded-xl px-4 py-3 bg-indigo-50 ring-1 ring-indigo-200">
                       <div className="flex items-center gap-2 text-sm font-bold text-indigo-800">
                         <FiShield size={18} />Deployed: {selectedComplaint.deployedTanodName}
@@ -783,8 +847,8 @@ const Notiftable = () => {
                 <div className="flex items-center gap-3 text-white">
                   <div className="bg-white/20 p-2.5 rounded-xl"><FiShield size={20} /></div>
                   <div>
-                    <h3 className="text-lg font-extrabold">Deploy Tanod</h3>
-                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">Select an available tanod to deploy</p>
+                    <h3 className="text-lg font-extrabold">Deploy Tanods</h3>
+                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">Select at least {MIN_TANODS} available tanods to deploy</p>
                   </div>
                 </div>
                 <button
@@ -834,11 +898,11 @@ const Notiftable = () => {
                         <tbody>
                           {paginatedTanods.map((t) => {
                             const isDeployed = t.deploymentStatus === "deployed";
-                            const isSelected = selectedTanod === t.uid;
+                            const isSelected = selectedTanods.has(t.uid);
                             return (
                               <tr
                                 key={t.uid}
-                                onClick={() => { if (!isDeployed) setSelectedTanod(t.uid); }}
+                                onClick={() => { if (!isDeployed) toggleTanod(t.uid); }}
                                 className={`border-b border-gray-100 transition ${
                                   isDeployed
                                     ? "opacity-50 cursor-not-allowed bg-gray-50"
@@ -849,13 +913,11 @@ const Notiftable = () => {
                               >
                                 <td className="px-4 py-3">
                                   <input
-                                    type="radio"
-                                    name="deployTanod"
-                                    value={t.uid}
+                                    type="checkbox"
                                     checked={isSelected}
                                     disabled={isDeployed}
-                                    onChange={() => setSelectedTanod(t.uid)}
-                                    className="accent-indigo-600"
+                                    onChange={() => toggleTanod(t.uid)}
+                                    className="accent-indigo-600 w-4 h-4"
                                   />
                                 </td>
                                 <td className="px-4 py-3">
@@ -913,22 +975,41 @@ const Notiftable = () => {
                 )}
               </div>
 
-              <div className="border-t px-6 py-4 bg-slate-50 flex gap-3 shrink-0">
-                <button
-                  onClick={() => setShowDeployModal(false)}
-                  className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDeploy}
-                  disabled={!selectedTanod || deploying}
-                  className={`flex-1 py-3 rounded-xl text-white font-extrabold text-sm transition shadow-md ${
-                    !selectedTanod || deploying ? "bg-gray-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
-                  }`}
-                >
-                  {deploying ? "Deploying…" : "Confirm & Deploy →"}
-                </button>
+              <div className="border-t px-6 py-4 bg-slate-50 space-y-3 shrink-0">
+                {selectedTanods.size > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-gray-600">Selected ({selectedTanods.size}):</span>
+                    {[...selectedTanods].map((uid) => {
+                      const t = tanods.find((x) => x.uid === uid);
+                      return (
+                        <span key={uid} className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-bold ring-1 ring-indigo-200">
+                          <FiShield size={12} />{t?.fullName || uid}
+                          <button onClick={() => toggleTanod(uid)} className="ml-0.5 hover:text-red-600 transition"><FiX size={12} /></button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {selectedTanods.size > 0 && selectedTanods.size < MIN_TANODS && (
+                  <p className="text-xs font-bold text-amber-600">Select at least {MIN_TANODS} tanods to deploy.</p>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowDeployModal(false)}
+                    className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDeploy}
+                    disabled={selectedTanods.size < MIN_TANODS || deploying}
+                    className={`flex-1 py-3 rounded-xl text-white font-extrabold text-sm transition shadow-md ${
+                      selectedTanods.size < MIN_TANODS || deploying ? "bg-gray-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
+                    }`}
+                  >
+                    {deploying ? "Deploying…" : `Deploy ${selectedTanods.size} Tanod${selectedTanods.size !== 1 ? "s" : ""} →`}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
