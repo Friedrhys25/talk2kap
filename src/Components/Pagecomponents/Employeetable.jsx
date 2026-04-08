@@ -48,6 +48,8 @@ const positionOptions = [
 export default function EmployeeTable() {
   const [employees, setEmployees] = useState([]);
   const [feedbackMap, setFeedbackMap] = useState({}); // { employeeId: [feedback, ...] }
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [selectedEmployeeForFeedback, setSelectedEmployeeForFeedback] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null); // doc id being edited
   const [creating, setCreating] = useState(false);
@@ -60,10 +62,10 @@ export default function EmployeeTable() {
   const [filter, setFilter] = useState("all");
   const [positionFilter, setPositionFilter] = useState("All Positions");
 
-  // ─── Fetch employees from Firestore (isEmployee === true) ───────────────────
+  // ─── Fetch employees from Firestore (isEmployee === true AND idstatus === "verified") ───────────────────
   useEffect(() => {
     const empCol = collection(db, "employee");
-    const empQuery = query(empCol, where("isEmployee", "==", true));
+    const empQuery = query(empCol, where("isEmployee", "==", true), where("idstatus", "==", "verified"));
 
     const unsubscribe = onSnapshot(empQuery, (snapshot) => {
       const list = snapshot.docs.map((d) => ({
@@ -84,25 +86,44 @@ export default function EmployeeTable() {
     return () => unsubscribe();
   }, []);
 
-  // ─── Fetch complaintFeedback collection ─────────────────────────────────────
-  // Assumes each feedback doc has: employeeId (matches employee doc id),
-  // rating (number), comment (string), citizen (string), timestamp
+  // ─── Fetch feedback from employee deploymentHistory ───────────────────────
+  // Each deployment can have tanodComment and tanodRating
   useEffect(() => {
-    const fbCol = collection(db, "complaintFeedback");
+    const employeeRef = collection(db, "employee");
+    const innerUnsubs = [];
 
-    const unsubscribe = onSnapshot(fbCol, (snapshot) => {
+    const unsubEmployees = onSnapshot(employeeRef, (employeeSnapshot) => {
       const map = {};
-      snapshot.docs.forEach((d) => {
-        const data = { id: d.id, ...d.data() };
-        const empId = data.employeeId;
-        if (!empId) return;
-        if (!map[empId]) map[empId] = [];
-        map[empId].push(data);
+      employeeSnapshot.forEach((empDoc) => {
+        const empId = empDoc.id;
+        const deploymentHistoryRef = collection(db, "employee", empId, "deploymentHistory");
+        
+        const unsubHistory = onSnapshot(deploymentHistoryRef, (historySnap) => {
+          const empFeedbacks = [];
+          historySnap.forEach((histDoc) => {
+            const histData = histDoc.data();
+            // Extract feedback from this deployment record
+            if (histData.tanodRating || histData.tanodComment) {
+              empFeedbacks.push({
+                id: histDoc.id,
+                rating: histData.tanodRating || 0,
+                complaint: histData.description || histData.message || "—",
+                comment: histData.tanodComment || "",
+              });
+            }
+          });
+          map[empId] = empFeedbacks;
+          setFeedbackMap({ ...map });
+        });
+        innerUnsubs.push(unsubHistory);
       });
-      setFeedbackMap(map);
     });
+    innerUnsubs.push(unsubEmployees);
 
-    return () => unsubscribe();
+    return () => {
+      unsubEmployees();
+      innerUnsubs.forEach((u) => u());
+    };
   }, []);
 
   // ─── Compute rating per employee ────────────────────────────────────────────
@@ -222,6 +243,11 @@ export default function EmployeeTable() {
         alert(data.error || "Failed to create employee.");
         return;
       }
+      // Set idstatus to null in Firestore so the employee appears in Validations table
+      if (data.employeeId || data.uid) {
+        const empId = data.employeeId || data.uid;
+        await updateDoc(doc(db, "employee", empId), { idstatus: null });
+      }
       setForm(emptyForm);
       setFormErrors({});
     } catch (err) {
@@ -264,6 +290,19 @@ export default function EmployeeTable() {
   const deleteEmployee = async (id) => {
     if (!confirm("Delete this employee?")) return;
     await deleteDoc(doc(db, "employee", id));
+  };
+
+  const openFeedbackModal = (employee) => {
+    const feedbacks = feedbackMap[employee.id] || [];
+    const rating = feedbacks.length > 0 
+      ? (feedbacks.reduce((sum, fb) => sum + (fb.rating || 0), 0) / feedbacks.length).toFixed(1)
+      : 0;
+    setSelectedEmployeeForFeedback({ 
+      ...employee, 
+      feedbacks,
+      rating 
+    });
+    setShowFeedbackModal(true);
   };
 
   return (
@@ -628,6 +667,98 @@ export default function EmployeeTable() {
         {selectedEmployee && (
           <FeedbackModal employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} />
         )}
+
+        {/* ── View Employee Feedback Modal ─────────────────────────────────── */}
+        {showFeedbackModal && selectedEmployeeForFeedback && (
+          <div
+            className="fixed inset-0 z-70 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
+            onClick={() => setShowFeedbackModal(false)}
+          >
+            <div
+              className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-6 py-5 flex items-center justify-between bg-linear-to-r from-indigo-600 to-purple-600 shrink-0">
+                <div className="flex items-center gap-3 text-white">
+                  <div className="bg-white/20 p-2.5 rounded-xl"><FiStar size={20} /></div>
+                  <div>
+                    <h3 className="text-lg font-extrabold">Employee Feedback</h3>
+                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">{getFullName(selectedEmployeeForFeedback)}</p>
+                  </div>
+                </div>
+                <button
+                  className="text-white/80 hover:text-white hover:bg-white/15 rounded-full p-2 transition"
+                  onClick={() => setShowFeedbackModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-4 flex-1">
+                {selectedEmployeeForFeedback.feedbacks && selectedEmployeeForFeedback.feedbacks.length > 0 ? (
+                  <>
+                    {/* Summary */}
+                    <div className="rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 p-5 border border-indigo-100">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider mb-2">Average Rating</p>
+                          <p className="text-3xl font-extrabold text-indigo-900">{selectedEmployeeForFeedback.rating?.toFixed(1) || "—"}</p>
+                          <p className="text-sm font-semibold text-indigo-600 mt-1">{ratingLabel(selectedEmployeeForFeedback.rating)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider mb-2">Total Feedback</p>
+                          <p className="text-3xl font-extrabold text-indigo-900">{selectedEmployeeForFeedback.feedbacks.length}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Feedback List */}
+                    <div className="space-y-3">
+                      {selectedEmployeeForFeedback.feedbacks.map((fb, idx) => (
+                        <div key={fb.id || idx} className="rounded-xl border border-gray-200 bg-slate-50 p-4">
+                          {/* Complaint Details */}
+                          <div className="mb-3 pb-3 border-b border-gray-200">
+                            <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1">Complaint</p>
+                            <p className="text-sm text-gray-700 font-semibold">Anonymous Citizen - {fb.complaint || "—"}</p>
+                          </div>
+
+                          {/* Tanod Comment/Feedback */}
+                          {fb.comment && (
+                            <div className="mb-3 pb-3 border-b border-gray-200">
+                              <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1">Feedback</p>
+                              <p className="text-sm text-gray-700">{fb.comment}</p>
+                            </div>
+                          )}
+
+                          {/* Rating Display */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex gap-1">
+                              {[1, 2, 3, 4, 5].map((n) => (
+                                <FiStar
+                                  key={n}
+                                  size={16}
+                                  className={n <= (fb.rating || 0) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}
+                                />
+                              ))}
+                            </div>
+                            <p className="text-sm font-bold text-indigo-600">{fb.rating || 0}/5</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <div className="rounded-full bg-gray-100 p-4 mb-3"><FiStar size={32} className="text-gray-400" /></div>
+                    <p className="text-gray-500 font-semibold">No feedback yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -714,11 +845,11 @@ function FeedbackModal({ employee, onClose }) {
   });
 
   const formatDate = (ts) => {
-    if (!ts) return "No date";
+    if (!ts) return "";
     // Firestore Timestamp object
     const ms = ts?.seconds ? ts.seconds * 1000 : Number(ts);
     const d = new Date(ms);
-    if (isNaN(d.getTime())) return "No date";
+    if (isNaN(d.getTime())) return "";
     return d.toLocaleString(undefined, {
       year: "numeric", month: "short", day: "numeric",
       hour: "2-digit", minute: "2-digit",
@@ -791,10 +922,7 @@ function FeedbackModal({ employee, onClose }) {
               </div>
             </div>
 
-            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/15 border border-white/20 text-white text-xs font-extrabold self-start">
-              <FiMessageCircle />
-              Citizen Feedback
-            </span>
+            
           </div>
         </div>
 

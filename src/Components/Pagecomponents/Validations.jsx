@@ -11,6 +11,8 @@ import {
   doc,
   updateDoc,
   deleteDoc,
+  query,
+  where,
 } from "firebase/firestore";
 import app from "../../firebaseConfig";
 
@@ -42,15 +44,17 @@ const Validations = () => {
   const [filter, setFilter] = useState("all");
   const [purokFilter, setPurokFilter] = useState("All Purok");
   const [users, setUsers] = useState([]);
+  const [tanods, setTanods] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [tanodLoading, setTanodLoading] = useState(true);
 
   // Tanod-specific state
   const [tanodSearch, setTanodSearch] = useState("");
   const [tanodPurokFilter, setTanodPurokFilter] = useState("All Purok");
 
-  // ── Firestore listener ───────────────────────────────────────────────────────
+  // ── Firestore listener (Residents from users collection) ───────────────────
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(firestore, "users"),
@@ -86,9 +90,49 @@ const Validations = () => {
     return () => unsubscribe();
   }, []);
 
-  // ── Separate residents and tanods ────────────────────────────────────────────
-  const residents = useMemo(() => users.filter((u) => !u.isEmployee), [users]);
-  const tanods = useMemo(() => users.filter((u) => u.isEmployee === true), [users]);
+  // ── Firestore listener (Tanods/Employees from employee collection) ───────────
+  useEffect(() => {
+    const empCol = collection(firestore, "employee");
+    // Fetch employees where idstatus is null or "pending"
+    const unsubscribe = onSnapshot(empCol, (snapshot) => {
+      const tanodArray = [];
+      snapshot.forEach((docSnap) => {
+        const tanod = docSnap.data();
+        const idStatus = (tanod.idstatus || "").toLowerCase();
+        
+        // Only include if idstatus is null, "pending", or undefined
+        if (idStatus === "" || idStatus === "pending" || !tanod.idstatus) {
+          tanodArray.push({
+            id: docSnap.id,
+            complainant: [tanod.firstName, tanod.middleName, tanod.lastName]
+              .filter(Boolean).join(" ").trim() || "—",
+            ...tanod,
+            idstatus: normalizeStatus(tanod.idstatus),
+            _collection: "employee",
+          });
+        }
+      });
+
+      const order = { pending: 0, declined: 1, verified: 2 };
+      tanodArray.sort((a, b) => {
+        const ao = order[a.idstatus] ?? 9;
+        const bo = order[b.idstatus] ?? 9;
+        if (ao !== bo) return ao - bo;
+        return (a.complainant || "").localeCompare(b.complainant || "");
+      });
+
+      setTanods(tanodArray);
+      setTanodLoading(false);
+    },
+    (err) => {
+      console.error("Firestore error fetching tanods:", err);
+      setTanodLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // ── Separate residents (no longer need to filter tanods from users) ────────
+  const residents = useMemo(() => users, [users]);
 
   // ── Purok options ────────────────────────────────────────────────────────────
   const purokOptions = useMemo(() => {
@@ -176,7 +220,7 @@ const Validations = () => {
         String(user.number || "").toLowerCase().includes(term) ||
         String(user.purok || "").toLowerCase().includes(term) ||
         String(user.address || "").toLowerCase().includes(term) ||
-        String(user.employeeRole || "").toLowerCase().includes(term) ||
+        String(user.position || "").toLowerCase().includes(term) ||
         String(user.email || "").toLowerCase().includes(term);
       const matchesPurok =
         tanodPurokFilter === "All Purok"
@@ -209,11 +253,23 @@ const Validations = () => {
   // ── Update / Delete ──────────────────────────────────────────────────────────
   const updateStatus = async (id, newStatus) => {
     try {
-      await updateDoc(doc(firestore, "users", id), { idstatus: newStatus });
-      const normalized = normalizeStatus(newStatus);
-      setUsers((prev) => prev.map((u) => u.id === id ? { ...u, idstatus: normalized } : u));
-      if (selectedUser?.id === id)
-        setSelectedUser((prev) => prev ? { ...prev, idstatus: normalized } : prev);
+      // Check if updating a resident (users collection) or tanod (employee collection)
+      const isResident = residents.some(u => u.id === id);
+      const isTanod = tanods.some(t => t.id === id);
+      
+      if (isResident) {
+        await updateDoc(doc(firestore, "users", id), { idstatus: newStatus });
+        const normalized = normalizeStatus(newStatus);
+        setUsers((prev) => prev.map((u) => u.id === id ? { ...u, idstatus: normalized } : u));
+        if (selectedUser?.id === id)
+          setSelectedUser((prev) => prev ? { ...prev, idstatus: normalized } : prev);
+      } else if (isTanod) {
+        await updateDoc(doc(firestore, "employee", id), { idstatus: newStatus });
+        const normalized = normalizeStatus(newStatus);
+        setTanods((prev) => prev.map((t) => t.id === id ? { ...t, idstatus: normalized } : t));
+        if (selectedUser?.id === id)
+          setSelectedUser((prev) => prev ? { ...prev, idstatus: normalized } : prev);
+      }
     } catch (err) {
       console.error("Error updating status:", err);
       alert("Failed to update status.");
@@ -223,8 +279,18 @@ const Validations = () => {
   const deleteUser = async (id) => {
     if (!window.confirm("Delete this user permanently? This cannot be undone.")) return;
     try {
-      await deleteDoc(doc(firestore, "users", id));
-      setUsers((prev) => prev.filter((u) => u.id !== id));
+      // Check if deleting a resident (users collection) or tanod (employee collection)
+      const isResident = residents.some(u => u.id === id);
+      const isTanod = tanods.some(t => t.id === id);
+      
+      if (isResident) {
+        await deleteDoc(doc(firestore, "users", id));
+        setUsers((prev) => prev.filter((u) => u.id !== id));
+      } else if (isTanod) {
+        await deleteDoc(doc(firestore, "employee", id));
+        setTanods((prev) => prev.filter((t) => t.id !== id));
+      }
+      
       if (selectedUser?.id === id) setSelectedUser(null);
     } catch (err) {
       console.error("Error deleting user:", err);
@@ -234,10 +300,21 @@ const Validations = () => {
 
   const updateShift = async (id, newShift) => {
     try {
-      await updateDoc(doc(firestore, "users", id), { shift: newShift });
-      setUsers((prev) => prev.map((u) => u.id === id ? { ...u, shift: newShift } : u));
-      if (selectedUser?.id === id)
-        setSelectedUser((prev) => prev ? { ...prev, shift: newShift } : prev);
+      // Check if updating a resident (users collection) or tanod (employee collection)
+      const isResident = residents.some(u => u.id === id);
+      const isTanod = tanods.some(t => t.id === id);
+      
+      if (isResident) {
+        await updateDoc(doc(firestore, "users", id), { shift: newShift });
+        setUsers((prev) => prev.map((u) => u.id === id ? { ...u, shift: newShift } : u));
+        if (selectedUser?.id === id)
+          setSelectedUser((prev) => prev ? { ...prev, shift: newShift } : prev);
+      } else if (isTanod) {
+        await updateDoc(doc(firestore, "employee", id), { shift: newShift });
+        setTanods((prev) => prev.map((t) => t.id === id ? { ...t, shift: newShift } : t));
+        if (selectedUser?.id === id)
+          setSelectedUser((prev) => prev ? { ...prev, shift: newShift } : prev);
+      }
     } catch (err) {
       console.error("Error updating shift:", err);
       alert("Failed to update shift.");
@@ -433,7 +510,7 @@ const Validations = () => {
               <FiSearch className="absolute left-3 top-1/2 text-gray-400 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search name, contact, purok, role, email..."
+                placeholder="Search name, contact, purok, position, email..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/80 backdrop-blur shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 value={tanodSearch}
                 onChange={(e) => setTanodSearch(e.target.value)}
@@ -471,7 +548,7 @@ const Validations = () => {
 
         {/* Tanod Table */}
         <div className="rounded-2xl border border-indigo-100 bg-white/80 backdrop-blur shadow-2xl overflow-hidden">
-          {loading ? (
+          {tanodLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mr-3" />
               <span className="text-gray-500 font-semibold">Loading tanods...</span>
@@ -481,7 +558,7 @@ const Validations = () => {
               <table className="w-full min-w-[1100px] text-left">
                 <thead className="bg-indigo-50 sticky top-0 z-10">
                   <tr className="border-b border-indigo-100">
-                    {["Name", "Contact", "Purok", "Address", "Role", "Shift", "ID Status", "Verification", "Actions"].map((h) => (
+                    {["Name", "Contact", "Purok", "Address", "Position", "Shift", "ID Status", "Verification", "Actions"].map((h) => (
                       <th key={h} className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-indigo-700 ${h === "Actions" ? "text-right" : ""}`}>
                         {h}
                       </th>
@@ -507,9 +584,9 @@ const Validations = () => {
                       <td className="px-6 py-4 text-sm font-semibold text-gray-800">Purok {user.purok || "—"}</td>
                       <td className="px-6 py-4 max-w-xs truncate text-sm text-gray-700" title={user.address || ""}>{user.address || "—"}</td>
                       <td className="px-6 py-4">
-                        {user.employeeRole ? (
+                        {user.position ? (
                           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border bg-indigo-100 text-indigo-700 border-indigo-200 capitalize">
-                            {user.employeeRole}
+                            {user.position}
                           </span>
                         ) : (
                           <span className="text-sm text-gray-400">—</span>
@@ -606,8 +683,8 @@ const Validations = () => {
                     <InfoRow label="Address" value={selectedUser.address}     icon={<FiHome  className="text-purple-600"  size={18} />} tone="purple"  />
                     {selectedUser.isEmployee && (
                       <InfoRow
-                        label="Role"
-                        value={selectedUser.employeeRole}
+                        label="Position"
+                        value={selectedUser.position}
                         icon={<FiShield className="text-indigo-600" size={18} />}
                         tone="indigo"
                       />

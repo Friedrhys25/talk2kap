@@ -1,5 +1,5 @@
 // Sidebarui.jsx - Updated with Emergency Hotlines
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   FiAlertCircle, FiMail, FiArrowLeftCircle, FiChevronsRight,
   FiBell, FiHome, FiBarChart, FiUsers, FiX, FiUser, FiPhone,
@@ -54,21 +54,49 @@ export const Example = () => {
   const [pendingComplaintsCount, setPendingComplaintsCount] = useState(0);
   const [pendingValidationsCount, setPendingValidationsCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const audioRef = useRef(null);
+  const previousValidationCountRef = useRef(0);
 
   // ── Firestore listeners ─────────────────────────────────────────────────────
   useEffect(() => {
     const usersRef = collection(firestore, "users");
+    const employeeRef = collection(firestore, "employee");
     const innerUnsubs = [];
 
     const complaintsMap = {};
     const validationMap = {};
+    const tanodValidationMap = {};
     const messagesMap   = {};
 
     const recalc = () => {
       setPendingComplaintsCount(Object.values(complaintsMap).reduce((a, b) => a + b, 0));
-      setPendingValidationsCount(Object.values(validationMap).filter(Boolean).length);
+      const residentValidations = Object.values(validationMap).filter(Boolean).length;
+      const tanodValidations = Object.values(tanodValidationMap).filter(Boolean).length;
+      const newValidationCount = residentValidations + tanodValidations;
+      setPendingValidationsCount(newValidationCount);
       setUnreadMessagesCount(Object.values(messagesMap).filter(Boolean).length);
+      
+      // Play sound if validation count increased (new complaints)
+      if (newValidationCount > previousValidationCountRef.current && audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(err => console.log("Audio play failed:", err));
+      }
+      previousValidationCountRef.current = newValidationCount;
     };
+
+    // ── Tanods (employees) validation listener ───────────────────────────────
+    const unsubEmployees = onSnapshot(employeeRef, (employeeSnapshot) => {
+      tanodValidationMap;
+      employeeSnapshot.forEach((empDoc) => {
+        const empId = empDoc.id;
+        const empData = empDoc.data();
+        // Include if idstatus is null, undefined, or "pending"
+        const status = (empData.idstatus || "").toLowerCase();
+        tanodValidationMap[empId] = status === "" || status === "pending";
+      });
+      recalc();
+    });
+    innerUnsubs.push(unsubEmployees);
 
     const unsubUsers = onSnapshot(usersRef, (usersSnapshot) => {
       usersSnapshot.forEach((userDoc) => {
@@ -122,6 +150,11 @@ export const Example = () => {
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
+      {/* Audio alert for new complaints */}
+      <audio 
+        ref={audioRef} 
+        src="/src/assets/The Purge Siren - Sound Effect for editing.mp3"
+      />
       {/* Watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -215,7 +248,7 @@ const Sidebar = ({ selected, setSelected, pendingComplaintsCount, pendingValidat
     { title: "Dashboard",          Icon: FiHome },
     { title: "Complaints",         Icon: FiAlertCircle, notifs: pendingComplaintsCount  > 0 ? pendingComplaintsCount  : null },
     { title: "Messages",           Icon: FiMail,        notifs: unreadMessagesCount     > 0 ? unreadMessagesCount     : null },
-    { title: "User Validation",    Icon: FiUser,        notifs: pendingValidationsCount > 0 ? pendingValidationsCount : null },
+    { title: "Validations",        Icon: FiUser,        notifs: pendingValidationsCount > 0 ? pendingValidationsCount : null },
     { title: "Reports",            Icon: FiBarChart },
     { title: "Barangay Officials", Icon: FiUsers },
     { title: "Barangay Employees", Icon: FiUsers },
@@ -398,7 +431,7 @@ const ExampleContent = ({ selected }) => (
         {selected === "Dashboard"          && <PageWrap key="dashboard"  ><Dashpage      /></PageWrap>}
         {selected === "Complaints"         && <PageWrap key="complaints" ><Salepage      /></PageWrap>}
         {selected === "Messages"           && <PageWrap key="messages"   ><Messagepage   /></PageWrap>}
-        {selected === "User Validation"    && <PageWrap key="validation" ><Uservalid     /></PageWrap>}
+        {selected === "Validations"         && <PageWrap key="validation" ><Uservalid     /></PageWrap>}
         {selected === "Reports"            && <PageWrap key="reports"    ><Reportspage   /></PageWrap>}
         {selected === "Barangay Officials" && <PageWrap key="officials"  ><Officialpage  /></PageWrap>}
         {selected === "Barangay Employees" && <PageWrap key="employees"  ><Employeepage  /></PageWrap>}
