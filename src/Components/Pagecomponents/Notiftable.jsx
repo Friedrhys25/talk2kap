@@ -776,8 +776,9 @@ const Notiftable = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <InfoRow icon={<FiUser size={18} />}     title="Complainant"       value={selectedComplaint.name}                     tone="indigo" />
+                  <InfoRow icon={<FiHome size={18} />}     title="Complainant Address" value={selectedComplaint.address}                  tone="blue"   />
                   <InfoRow icon={<FiMapPin size={18} />}   title="Purok"             value={`Purok ${selectedComplaint.incidentPurok}`} tone="green"  />
-                  <InfoRow icon={<FiHome size={18} />}     title="Incident Location" value={selectedComplaint.incidentLocation}          tone="amber"  />
+                  <InfoRow icon={<FiMapPin size={18} />}   title="Incident Location" value={selectedComplaint.incidentLocation}          tone="amber"  />
                   <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
                     <div className="flex items-start gap-3">
                       <div className="p-2.5 rounded-xl bg-purple-100 text-purple-700"><FiFileText size={18} /></div>

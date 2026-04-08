@@ -1,8 +1,8 @@
-// Sidebar.jsx (or wherever Example lives) - Updated to use Firestore
+// Sidebarui.jsx - Updated with Emergency Hotlines
 import React, { useState, useEffect } from "react";
 import {
   FiAlertCircle, FiMail, FiArrowLeftCircle, FiChevronsRight,
-  FiBell, FiHome, FiBarChart, FiUsers, FiX, FiUser,
+  FiBell, FiHome, FiBarChart, FiUsers, FiX, FiUser, FiPhone,
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -13,13 +13,14 @@ import {
 } from "firebase/firestore";
 import app from "../firebaseConfig";
 
-import Dashpage      from "../Pages/Sidebarpages/Dashpage";
-import Salepage      from "../Pages/Sidebarpages/Notifpage";
-import Messagepage   from "../Pages/Sidebarpages/Messagepage";
-import Uservalid     from "../Pages/Sidebarpages/Uservalid";
-import Reportspage   from "../Pages/Sidebarpages/Reportspage";
-import Officialpage  from "../Pages/Sidebarpages/Officialpage";
-import Employeepage  from "../Pages/Sidebarpages/Employeepage";
+import Dashpage       from "../Pages/Sidebarpages/Dashpage";
+import Salepage       from "../Pages/Sidebarpages/Notifpage";
+import Messagepage    from "../Pages/Sidebarpages/Messagepage";
+import Uservalid      from "../Pages/Sidebarpages/Uservalid";
+import Reportspage    from "../Pages/Sidebarpages/Reportspage";
+import Officialpage   from "../Pages/Sidebarpages/Officialpage";
+import Employeepage   from "../Pages/Sidebarpages/Employeepage";
+import Emergencypage  from "../Pages/Sidebarpages/emergencypage";
 
 const firestore = getFirestore(app);
 
@@ -59,10 +60,9 @@ export const Example = () => {
     const usersRef = collection(firestore, "users");
     const innerUnsubs = [];
 
-    // Accumulate counts per user so updates are additive-safe
-    const complaintsMap = {}; // userId -> pending count
-    const validationMap = {}; // userId -> is pending
-    const messagesMap   = {}; // userId+complaintId -> has unread
+    const complaintsMap = {};
+    const validationMap = {};
+    const messagesMap   = {};
 
     const recalc = () => {
       setPendingComplaintsCount(Object.values(complaintsMap).reduce((a, b) => a + b, 0));
@@ -96,7 +96,6 @@ export const Example = () => {
               let hasUnread = false;
               chatSnap.forEach((msgDoc) => {
                 const msg = msgDoc.data();
-                // Unread = sent by user (not admin), not yet read
                 if (msg?.senderId !== "admin" && msg?.read === false) hasUnread = true;
               });
               messagesMap[mapKey] = hasUnread;
@@ -111,7 +110,7 @@ export const Example = () => {
         });
 
         innerUnsubs.push(unsubComplaints);
-        recalc(); // recalc after validationMap update
+        recalc();
       });
     });
 
@@ -220,6 +219,7 @@ const Sidebar = ({ selected, setSelected, pendingComplaintsCount, pendingValidat
     { title: "Reports",            Icon: FiBarChart },
     { title: "Barangay Officials", Icon: FiUsers },
     { title: "Barangay Employees", Icon: FiUsers },
+    { title: "Emergency Hotlines", Icon: FiPhone },
   ];
 
   return (
@@ -395,13 +395,14 @@ const ExampleContent = ({ selected }) => (
     transition={{ type: "spring", stiffness: 420, damping: 32 }}>
     <div className="h-full w-full overflow-y-auto">
       <AnimatePresence mode="wait">
-        {selected === "Dashboard"          && <PageWrap key="dashboard"  ><Dashpage     /></PageWrap>}
-        {selected === "Complaints"         && <PageWrap key="complaints" ><Salepage     /></PageWrap>}
-        {selected === "Messages"           && <PageWrap key="messages"   ><Messagepage  /></PageWrap>}
-        {selected === "User Validation"    && <PageWrap key="validation" ><Uservalid    /></PageWrap>}
-        {selected === "Reports"            && <PageWrap key="reports"    ><Reportspage  /></PageWrap>}
-        {selected === "Barangay Officials" && <PageWrap key="officials"  ><Officialpage /></PageWrap>}
-        {selected === "Barangay Employees" && <PageWrap key="employees"  ><Employeepage /></PageWrap>}
+        {selected === "Dashboard"          && <PageWrap key="dashboard"  ><Dashpage      /></PageWrap>}
+        {selected === "Complaints"         && <PageWrap key="complaints" ><Salepage      /></PageWrap>}
+        {selected === "Messages"           && <PageWrap key="messages"   ><Messagepage   /></PageWrap>}
+        {selected === "User Validation"    && <PageWrap key="validation" ><Uservalid     /></PageWrap>}
+        {selected === "Reports"            && <PageWrap key="reports"    ><Reportspage   /></PageWrap>}
+        {selected === "Barangay Officials" && <PageWrap key="officials"  ><Officialpage  /></PageWrap>}
+        {selected === "Barangay Employees" && <PageWrap key="employees"  ><Employeepage  /></PageWrap>}
+        {selected === "Emergency Hotlines" && <PageWrap key="emergency"  ><Emergencypage /></PageWrap>}
       </AnimatePresence>
     </div>
   </motion.div>
