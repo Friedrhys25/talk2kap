@@ -156,6 +156,7 @@ const Notiftable = () => {
   const [deploying, setDeploying]         = useState(false);
   const [tanodSearch, setTanodSearch]     = useState("");
   const [tanodPage, setTanodPage]         = useState(1);
+  const [deployError, setDeployError]     = useState("");
   const TANODS_PER_PAGE = 5;
   const MIN_TANODS = 2;
 
@@ -248,7 +249,7 @@ const Notiftable = () => {
     // Count pending complaints
     const pendingCount = notifications.filter(c => (c.status || "pending") === "pending").length;
     
-    // Play sound if pending count increased (new complaints)
+    // Play sound when complaint count increases (new complaints arrive)
     if (pendingCount > previousComplaintsCountRef.current && audioRef.current) {
       audioRef.current.currentTime = 0;
       audioRef.current.play().catch(err => console.log("Audio play failed:", err));
@@ -345,9 +346,14 @@ const Notiftable = () => {
 
   const filteredTanods = useMemo(() => {
     const term = tanodSearch.toLowerCase();
-    return tanods.filter((t) =>
-      !term || t.fullName.toLowerCase().includes(term)
-    );
+    return tanods.filter((t) => {
+      // Only show tanods with approved ID status
+      const isApproved = (t.idstatus || "").toLowerCase() === "approved";
+      if (!isApproved) return false;
+      // Also filter by search term if provided
+      if (term && !t.fullName.toLowerCase().includes(term)) return false;
+      return true;
+    });
   }, [tanods, tanodSearch]);
 
   const tanodTotalPages = Math.max(1, Math.ceil(filteredTanods.length / TANODS_PER_PAGE));
@@ -358,7 +364,23 @@ const Notiftable = () => {
 
   const confirmDeploy = async () => {
     if (selectedTanods.size < MIN_TANODS || !deployTarget) return;
+    
+    // Validate that all selected tanods have approved ID status
+    const unapprovedTanods = [];
+    for (const uid of selectedTanods) {
+      const tanod = tanods.find((t) => t.uid === uid);
+      if (!tanod || (tanod.idstatus || "").toLowerCase() !== "approved") {
+        unapprovedTanods.push(tanod?.fullName || uid);
+      }
+    }
+    
+    if (unapprovedTanods.length > 0) {
+      setDeployError(`Cannot deploy tanods with pending ID verification: ${unapprovedTanods.join(", ")}. They must be approved first.`);
+      return;
+    }
+    
     setDeploying(true);
+    setDeployError("");
     try {
       const selectedArr = [...selectedTanods];
       const deployedTanods = selectedArr.map((uid) => {
@@ -408,7 +430,7 @@ const Notiftable = () => {
       setSelectedTanods(new Set());
     } catch (err) {
       console.error(err);
-      alert("Failed to deploy tanods.");
+      setDeployError("Failed to deploy tanods. Please try again.");
     } finally {
       setDeploying(false);
     }
@@ -830,7 +852,7 @@ const Notiftable = () => {
                   <div className="bg-white/20 p-2.5 rounded-xl"><FiShield size={20} /></div>
                   <div>
                     <h3 className="text-lg font-extrabold">Deploy Tanods</h3>
-                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">Select at least {MIN_TANODS} available tanods to deploy</p>
+                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">Select at least {MIN_TANODS} approved tanods to deploy</p>
                   </div>
                 </div>
                 <button
@@ -850,6 +872,14 @@ const Notiftable = () => {
                   </p>
                 </div>
 
+                {/* Deployment error message */}
+                {deployError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                    <p className="text-xs font-extrabold text-red-700 uppercase tracking-wider">⚠ Deployment Error</p>
+                    <p className="text-sm text-red-700 font-semibold mt-1">{deployError}</p>
+                  </div>
+                )}
+
                 {/* Search tanods */}
                 <div className="relative">
                   <FiSearch className="absolute left-3 top-1/2 text-gray-400 -translate-y-1/2" size={16} />
@@ -864,7 +894,7 @@ const Notiftable = () => {
 
                 {/* Tanod table */}
                 {filteredTanods.length === 0 ? (
-                  <p className="text-sm text-gray-500 font-semibold text-center py-6">No tanods found.</p>
+                  <p className="text-sm text-gray-500 font-semibold text-center py-6">No approved tanods available for deployment. Tanods must pass ID verification first.</p>
                 ) : (
                   <>
                     <div className="overflow-x-auto rounded-xl border border-gray-200">
@@ -919,7 +949,7 @@ const Notiftable = () => {
                                       ? "bg-red-100 text-red-700 ring-1 ring-red-200"
                                       : "bg-green-100 text-green-700 ring-1 ring-green-200"
                                   }`}>
-                                    {isDeployed ? "Deployed" : "Available"}
+                                    {isDeployed ? "Deployed" : "Approved"}
                                   </span>
                                 </td>
                               </tr>
@@ -977,7 +1007,7 @@ const Notiftable = () => {
                 )}
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setShowDeployModal(false)}
+                    onClick={() => { setShowDeployModal(false); setDeployError(""); }}
                     className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition"
                   >
                     Cancel

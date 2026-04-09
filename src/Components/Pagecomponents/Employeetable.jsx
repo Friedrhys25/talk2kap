@@ -126,6 +126,13 @@ export default function EmployeeTable() {
     };
   }, []);
 
+  // ─── Clear email and password when not editing (to prevent browser remember) ──────
+  useEffect(() => {
+    if (!editing) {
+      setForm((prev) => ({ ...prev, email: "", password: "" }));
+    }
+  }, [editing]);
+
   // ─── Compute rating per employee ────────────────────────────────────────────
   const employeesWithRating = useMemo(() => {
     return employees.map((e) => {
@@ -475,7 +482,7 @@ export default function EmployeeTable() {
                 <>
                   <div className="md:col-span-2">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Email *</label>
-                    <input type="email" placeholder="email@example.com" value={form.email}
+                    <input type="email" name="new-email-field" autoComplete="new-email" value={form.email}
                       onChange={(e) => { setForm({ ...form, email: e.target.value }); setFormErrors((p) => ({ ...p, email: undefined })); }}
                       className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${formErrors.email ? 'border-red-400' : 'border-gray-200'}`} />
                     {formErrors.email && <p className="text-xs text-red-500 mt-1">{formErrors.email}</p>}
@@ -483,7 +490,7 @@ export default function EmployeeTable() {
                   <div className="md:col-span-2">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Password *</label>
                     <div className="relative">
-                      <input type={showPassword ? "text" : "password"} placeholder="Min 6 chars" value={form.password}
+                      <input type={showPassword ? "text" : "password"} name="new-password-field" autoComplete="new-password" value={form.password}
                         onChange={(e) => { setForm({ ...form, password: e.target.value }); setFormErrors((p) => ({ ...p, password: undefined })); }}
                         className={`w-full border rounded-xl px-4 py-2.5 pr-10 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${formErrors.password ? 'border-red-400' : 'border-gray-200'}`} />
                       <button type="button" onClick={() => setShowPassword(!showPassword)}

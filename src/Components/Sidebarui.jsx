@@ -56,6 +56,8 @@ export const Example = () => {
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const audioRef = useRef(null);
   const previousValidationCountRef = useRef(0);
+  const previousComplaintsCountRef = useRef(0);
+  const sirenPlayedRef = useRef(false);
 
   // ── Firestore listeners ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -69,18 +71,27 @@ export const Example = () => {
     const messagesMap   = {};
 
     const recalc = () => {
-      setPendingComplaintsCount(Object.values(complaintsMap).reduce((a, b) => a + b, 0));
+      const newComplaintsCount = Object.values(complaintsMap).reduce((a, b) => a + b, 0);
+      setPendingComplaintsCount(newComplaintsCount);
       const residentValidations = Object.values(validationMap).filter(Boolean).length;
       const tanodValidations = Object.values(tanodValidationMap).filter(Boolean).length;
       const newValidationCount = residentValidations + tanodValidations;
       setPendingValidationsCount(newValidationCount);
       setUnreadMessagesCount(Object.values(messagesMap).filter(Boolean).length);
       
-      // Play sound if validation count increased (new complaints)
-      if (newValidationCount > previousValidationCountRef.current && audioRef.current) {
+      // Play siren sound ONLY ONCE when new complaints arrive (complaint count increases)
+      if (newComplaintsCount > previousComplaintsCountRef.current && !sirenPlayedRef.current && audioRef.current) {
         audioRef.current.currentTime = 0;
         audioRef.current.play().catch(err => console.log("Audio play failed:", err));
+        sirenPlayedRef.current = true; // Mark that siren has played for this batch
       }
+      
+      // Reset siren flag when all complaints are resolved
+      if (newComplaintsCount === 0) {
+        sirenPlayedRef.current = false;
+      }
+      
+      previousComplaintsCountRef.current = newComplaintsCount;
       previousValidationCountRef.current = newValidationCount;
     };
 
