@@ -591,9 +591,17 @@ export default function EmployeeTable() {
                     {/* Name */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-                          <FiUser />
-                        </div>
+                        {e.avatar ? (
+                          <img 
+                            src={e.avatar} 
+                            alt={getFullName(e)} 
+                            className="w-9 h-9 rounded-xl object-cover shrink-0 ring-2 ring-indigo-200"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                            <FiUser />
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <p className="font-extrabold text-gray-900 truncate">{getFullName(e)}</p>
                           <p className="text-xs font-semibold text-gray-400 truncate">ID: {e.id}</p>
@@ -890,8 +898,16 @@ function FeedbackModal({ employee, onClose }) {
 
           <div className="relative flex flex-col md:flex-row md:items-start md:justify-between gap-5">
             <div className="flex items-start gap-4">
-              <div className="bg-white/15 backdrop-blur-sm p-4 rounded-2xl border border-white/20">
-                <FiUser className="text-white" size={38} />
+              <div className="relative bg-white/15 backdrop-blur-sm rounded-2xl border border-white/20 w-24 h-24 flex items-center justify-center overflow-hidden shrink-0">
+                {employee.avatar ? (
+                  <img 
+                    src={employee.avatar} 
+                    alt={fullName} 
+                    className="w-full h-full rounded-xl object-cover"
+                  />
+                ) : (
+                  <FiUser className="text-white" size={38} />
+                )}
               </div>
 
               <div className="min-w-0">
