@@ -653,17 +653,35 @@ const Validations = () => {
                 <button className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full p-2 transition-all"
                   onClick={() => setSelectedUser(null)}><FiX size={22} /></button>
                 <div className="relative">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl md:text-2xl font-extrabold">
-                      {selectedUser.isEmployee ? "Tanod Details" : "User Details"}
-                    </h2>
+                  <div className="flex items-start gap-4">
+                    {/* Avatar Display for Tanods */}
                     {selectedUser.isEmployee && (
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-white/20 border border-white/30 ml-1">
-                        <FiShield size={12} /> Tanod
-                      </span>
+                      <div className="relative bg-white/15 backdrop-blur-sm rounded-2xl border border-white/20 w-20 h-20 flex items-center justify-center overflow-hidden shrink-0">
+                        {selectedUser.avatar ? (
+                          <img 
+                            src={selectedUser.avatar} 
+                            alt={selectedUser.complainant} 
+                            className="w-full h-full rounded-xl object-cover"
+                          />
+                        ) : (
+                          <FiUser className="text-white" size={32} />
+                        )}
+                      </div>
                     )}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl md:text-2xl font-extrabold">
+                          {selectedUser.isEmployee ? "Tanod Details" : "User Details"}
+                        </h2>
+                        {selectedUser.isEmployee && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-white/20 border border-white/30 ml-1">
+                            <FiShield size={12} /> Tanod
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-indigo-100 text-xs font-semibold mt-1">ID: {selectedUser.id}</p>
+                    </div>
                   </div>
-                  <p className="text-indigo-100 text-xs font-semibold mt-1">ID: {selectedUser.id}</p>
                 </div>
               </div>
 
