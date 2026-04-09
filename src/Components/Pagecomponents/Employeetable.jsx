@@ -285,6 +285,7 @@ export default function EmployeeTable() {
     if (!editing) return;
 
     await updateDoc(doc(db, "employee", editing), {
+      position: form.position,
       number: form.number.trim(),
       purok: form.purok.trim(),
       address: form.address.trim(),
@@ -443,9 +444,9 @@ export default function EmployeeTable() {
               </div>
               <div className="md:col-span-3">
                 <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Position</label>
-                <select value={form.position} disabled={!!editing}
+                <select value={form.position}
                   onChange={(e) => setForm({ ...form, position: e.target.value })}
-                  className={`w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${editing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}>
+                  className={`w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500`}>
                   {positionOptions.filter((p) => p !== "All Positions").map((p) => (
                     <option key={p} value={p}>{p}</option>
                   ))}

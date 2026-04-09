@@ -347,8 +347,8 @@ const Notiftable = () => {
   const filteredTanods = useMemo(() => {
     const term = tanodSearch.toLowerCase();
     return tanods.filter((t) => {
-      // Only show tanods with approved ID status
-      const isApproved = (t.idstatus || "").toLowerCase() === "approved";
+      // Only show tanods with verified ID status
+      const isApproved = (t.idstatus || "").toLowerCase() === "verified";
       if (!isApproved) return false;
       // Also filter by search term if provided
       if (term && !t.fullName.toLowerCase().includes(term)) return false;
@@ -365,17 +365,17 @@ const Notiftable = () => {
   const confirmDeploy = async () => {
     if (selectedTanods.size < MIN_TANODS || !deployTarget) return;
     
-    // Validate that all selected tanods have approved ID status
+    // Validate that all selected tanods have verified ID status
     const unapprovedTanods = [];
     for (const uid of selectedTanods) {
       const tanod = tanods.find((t) => t.uid === uid);
-      if (!tanod || (tanod.idstatus || "").toLowerCase() !== "approved") {
+      if (!tanod || (tanod.idstatus || "").toLowerCase() !== "verified") {
         unapprovedTanods.push(tanod?.fullName || uid);
       }
     }
     
     if (unapprovedTanods.length > 0) {
-      setDeployError(`Cannot deploy tanods with pending ID verification: ${unapprovedTanods.join(", ")}. They must be approved first.`);
+      setDeployError(`Cannot deploy tanods with pending ID verification: ${unapprovedTanods.join(", ")}. They must be verified first.`);
       return;
     }
     
@@ -852,7 +852,7 @@ const Notiftable = () => {
                   <div className="bg-white/20 p-2.5 rounded-xl"><FiShield size={20} /></div>
                   <div>
                     <h3 className="text-lg font-extrabold">Deploy Tanods</h3>
-                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">Select at least {MIN_TANODS} approved tanods to deploy</p>
+                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">Select at least {MIN_TANODS} verified tanods to deploy</p>
                   </div>
                 </div>
                 <button
@@ -894,7 +894,7 @@ const Notiftable = () => {
 
                 {/* Tanod table */}
                 {filteredTanods.length === 0 ? (
-                  <p className="text-sm text-gray-500 font-semibold text-center py-6">No approved tanods available for deployment. Tanods must pass ID verification first.</p>
+                  <p className="text-sm text-gray-500 font-semibold text-center py-6">No verified tanods available for deployment. Tanods must pass ID verification first.</p>
                 ) : (
                   <>
                     <div className="overflow-x-auto rounded-xl border border-gray-200">
@@ -941,7 +941,7 @@ const Notiftable = () => {
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 text-xs font-semibold text-gray-500 capitalize">
-                                  Tanod
+                                  {t.position || "Tanod"}
                                 </td>
                                 <td className="px-4 py-3">
                                   <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
@@ -949,7 +949,7 @@ const Notiftable = () => {
                                       ? "bg-red-100 text-red-700 ring-1 ring-red-200"
                                       : "bg-green-100 text-green-700 ring-1 ring-green-200"
                                   }`}>
-                                    {isDeployed ? "Deployed" : "Approved"}
+                                    {isDeployed ? "Deployed" : "Verified"}
                                   </span>
                                 </td>
                               </tr>
