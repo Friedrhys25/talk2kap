@@ -45,7 +45,70 @@ const StarDisplay = ({ value = 0, size = 22 }) => (
 const ratingLabel = (r) =>
   ["", "Poor", "Fair", "Good", "Very Good", "Excellent"][r] || "";
 
+// ── Pagination Component ──────────────────────────────────────────────────────
+const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, itemsPerPage }) => {
+  if (totalPages <= 1) return null;
+  const start = (currentPage - 1) * itemsPerPage + 1;
+  const end = Math.min(currentPage * itemsPerPage, totalItems);
 
+  const getPageNumbers = () => {
+    const pages = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 3) pages.push("...");
+      for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+        pages.push(i);
+      }
+      if (currentPage < totalPages - 2) pages.push("...");
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-4 border-t border-gray-200 bg-white">
+      <p className="text-xs font-semibold text-gray-500">
+        Showing <span className="font-extrabold text-gray-800">{start}–{end}</span> of{" "}
+        <span className="font-extrabold text-gray-800">{totalItems}</span> complaints
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+        >
+          <FiChevronLeft size={15} />
+        </button>
+        {getPageNumbers().map((page, idx) =>
+          page === "..." ? (
+            <span key={`ellipsis-${idx}`} className="px-2 py-1 text-xs font-semibold text-gray-400">…</span>
+          ) : (
+            <button
+              key={page}
+              onClick={() => onPageChange(page)}
+              className={`w-8 h-8 rounded-lg text-xs font-extrabold transition border ${
+                currentPage === page
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-indigo-50"
+              }`}
+            >
+              {page}
+            </button>
+          )
+        )}
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+        >
+          <FiChevronRight size={15} />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // ── Confirm Resolve Modal ─────────────────────────────────────────────────────
 const ConfirmResolveModal = ({ complaint, onConfirm, onCancel, resolving }) => {
@@ -134,6 +197,8 @@ const ConfirmResolveModal = ({ complaint, onConfirm, onCancel, resolving }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+const ITEMS_PER_PAGE = 10;
+
 const Notiftable = () => {
   const [filter, setFilter]               = useState("all");
   const [statusFilter, setStatusFilter]   = useState("all");
@@ -147,6 +212,9 @@ const Notiftable = () => {
   const [startDate, setStartDate]         = useState("");
   const [endDate, setEndDate]             = useState("");
   const [dateError, setDateError]         = useState("");
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const [currentPage, setCurrentPage]     = useState(1);
 
   // ── Deploy Tanod ─────────────────────────────────────────────────────────
   const [tanods, setTanods]               = useState([]);
@@ -182,9 +250,6 @@ const Notiftable = () => {
     });
     return () => unsub();
   }, []);
-
-  // ── Feedback notification dots ─────────────────────────────────────────────
-  // Driven by `hasFeedback` flag on complaint docs. No separate listener needed.
 
   // ── Complaints listener ───────────────────────────────────────────────────
   useEffect(() => {
@@ -229,7 +294,6 @@ const Notiftable = () => {
                     deployedTanods:    c.deployedTanods   || [],
                     deployedTanodUid:  c.deployedTanodUid  || null,
                     deployedTanodName: c.deployedTanodName || null,
-
                   });
                 });
                 return [...rest, ...fresh].sort((a, b) => b._rawTimestamp - a._rawTimestamp);
@@ -246,10 +310,7 @@ const Notiftable = () => {
 
   // ── Sound alert for new complaints ─────────────────────────────────────────
   useEffect(() => {
-    // Count pending complaints
     const pendingCount = notifications.filter(c => (c.status || "pending") === "pending").length;
-    
-    // Play sound when complaint count increases (new complaints arrive)
     if (pendingCount > previousComplaintsCountRef.current && audioRef.current) {
       audioRef.current.currentTime = 0;
       audioRef.current.play().catch(err => console.log("Audio play failed:", err));
@@ -270,6 +331,9 @@ const Notiftable = () => {
     if (b && b.start > b.end) { setDateError("From date must be earlier than To date."); return; }
     setDateError("");
   }, [startDate, endDate]);
+
+  // ── Reset page when filters change ───────────────────────────────────────
+  useEffect(() => { setCurrentPage(1); }, [filter, statusFilter, issueFilter, searchTerm, startDate, endDate]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const issueTypes = useMemo(() => {
@@ -297,6 +361,13 @@ const Notiftable = () => {
       return true;
     });
   }, [notifications, filter, statusFilter, issueFilter, searchTerm, startDate, endDate, dateError]);
+
+  // ── Pagination calculations ───────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(filteredNotifications.length / ITEMS_PER_PAGE));
+  const paginatedNotifications = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredNotifications.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredNotifications, currentPage]);
 
   const stats = useMemo(() => ({
     total:         filteredNotifications.length,
@@ -347,10 +418,8 @@ const Notiftable = () => {
   const filteredTanods = useMemo(() => {
     const term = tanodSearch.toLowerCase();
     return tanods.filter((t) => {
-      // Only show tanods with verified ID status
       const isApproved = (t.idstatus || "").toLowerCase() === "verified";
       if (!isApproved) return false;
-      // Also filter by search term if provided
       if (term && !t.fullName.toLowerCase().includes(term)) return false;
       return true;
     });
@@ -364,8 +433,6 @@ const Notiftable = () => {
 
   const confirmDeploy = async () => {
     if (selectedTanods.size < MIN_TANODS || !deployTarget) return;
-    
-    // Validate that all selected tanods have verified ID status
     const unapprovedTanods = [];
     for (const uid of selectedTanods) {
       const tanod = tanods.find((t) => t.uid === uid);
@@ -373,12 +440,10 @@ const Notiftable = () => {
         unapprovedTanods.push(tanod?.fullName || uid);
       }
     }
-    
     if (unapprovedTanods.length > 0) {
       setDeployError(`Cannot deploy tanods with pending ID verification: ${unapprovedTanods.join(", ")}. They must be verified first.`);
       return;
     }
-    
     setDeploying(true);
     setDeployError("");
     try {
@@ -388,19 +453,10 @@ const Notiftable = () => {
         return { uid, name: t?.fullName || "" };
       });
       const deployedTanodNames = deployedTanods.map((t) => t.name).join(", ");
-
-      // Update complaint: set status to in-progress + deployed tanods array
       await updateDoc(
         doc(firestore, "users", deployTarget.userId, "userComplaints", deployTarget.complaintKey),
-        {
-          deployedTanods,
-          deployedTanodUid: deployedTanods[0].uid,
-          deployedTanodName: deployedTanodNames,
-          status: "in-progress",
-        }
+        { deployedTanods, deployedTanodUid: deployedTanods[0].uid, deployedTanodName: deployedTanodNames, status: "in-progress" }
       );
-
-      // Update each tanod: mark as deployed with co-deployed info
       const deployedAt = new Date().toISOString();
       for (const { uid, name } of deployedTanods) {
         const coDeployedTanods = deployedTanods.filter((t) => t.uid !== uid);
@@ -418,7 +474,6 @@ const Notiftable = () => {
           },
         });
       }
-
       const patch = (c) =>
         c.complaintKey === deployTarget.complaintKey
           ? { ...c, deployedTanods, deployedTanodUid: deployedTanods[0].uid, deployedTanodName: deployedTanodNames, status: "in-progress" }
@@ -436,7 +491,7 @@ const Notiftable = () => {
     }
   };
 
-  // ── Direct resolve (no feedback input from admin) ─────────────────────────
+  // ── Direct resolve ────────────────────────────────────────────────────────
   const openConfirmResolve = (complaint) => {
     setResolvingComplaint(complaint);
     setShowConfirmResolve(true);
@@ -446,27 +501,19 @@ const Notiftable = () => {
     if (!resolvingComplaint) return;
     setResolving(true);
     try {
-      // Mark complaint as resolved
       await updateDoc(
         doc(firestore, "users", resolvingComplaint.userId, "userComplaints", resolvingComplaint.complaintKey),
         { status: "resolved", resolvedAt: serverTimestamp() }
       );
-
-      // Clear all deployed tanods' deployment status & save to history
       const tanodsToResolve = resolvingComplaint.deployedTanods || [];
-      // Fallback for legacy single-tanod complaints
       if (tanodsToResolve.length === 0 && resolvingComplaint.deployedTanodUid) {
         tanodsToResolve.push({ uid: resolvingComplaint.deployedTanodUid, name: resolvingComplaint.deployedTanodName });
       }
-
       for (const { uid } of tanodsToResolve) {
         const tanodRef = doc(firestore, "employee", uid);
         const tanodSnap = await getDoc(tanodRef);
         const deployedTo = tanodSnap.exists() ? tanodSnap.data().deployedTo : null;
-
         const coDeployedTanods = tanodsToResolve.filter((t) => t.uid !== uid);
-
-        // Save resolved deployment to history subcollection
         await setDoc(
           doc(firestore, "employee", uid, "deploymentHistory", resolvingComplaint.complaintKey),
           {
@@ -484,18 +531,10 @@ const Notiftable = () => {
             coDeployedTanods,
           }
         );
-
-        // Clear current deployment
-        await updateDoc(tanodRef, {
-          deploymentStatus: "available",
-          deployedTo: null,
-        });
+        await updateDoc(tanodRef, { deploymentStatus: "available", deployedTo: null });
       }
-
       const patch = (c) =>
-        c.complaintKey === resolvingComplaint.complaintKey
-          ? { ...c, status: "resolved" }
-          : c;
+        c.complaintKey === resolvingComplaint.complaintKey ? { ...c, status: "resolved" } : c;
       setNotifications((prev) => prev.map(patch));
       setSelectedComplaint((prev) => prev ? patch(prev) : prev);
       setShowConfirmResolve(false);
@@ -527,11 +566,8 @@ const Notiftable = () => {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
-      {/* Audio alert for new complaints */}
-      <audio 
-        ref={audioRef} 
-        src="/src/assets/The Purge Siren - Sound Effect for editing.mp3"
-      />
+      {/* Audio alert */}
+      <audio ref={audioRef} src="/src/assets/The Purge Siren - Sound Effect for editing.mp3" />
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -666,71 +702,82 @@ const Notiftable = () => {
               <span className="text-gray-500 font-semibold">Loading complaints...</span>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1080px] text-left">
-                <thead>
-                  <tr className="bg-linear-to-r from-slate-50 via-white to-slate-50 border-b border-gray-200">
-                    {["Urgency", "Purok", "Complainant", "Issue Type", "Description", "Deployed Tanod", "Date", "Status"].map((h) => (
-                      <th key={h} className="px-5 py-4 text-xs font-extrabold tracking-wider text-gray-600 uppercase">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredNotifications.map((n, idx) => {
-                    const urgency = getUrgencyDisplay(n.label);
-                    const status  = getStatusDisplay(n.status);
-                    return (
-                      <tr
-                        key={n.complaintKey}
-                        className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50/70"} border-b border-gray-100 hover:bg-indigo-50/60 transition cursor-pointer`}
-                        onClick={() => setSelectedComplaint(n)}
-                      >
-                        <td className="px-5 py-4">
-                          <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${urgency.pill}`}>
-                            {urgency.icon}{urgency.text}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-sm font-bold text-gray-900">Purok {n.incidentPurok}</td>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                            {n.name}
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-bold ${getIssueColor(n.type)}`}>{n.type}</span>
-                        </td>
-                        <td className="px-5 py-4 max-w-[280px]">
-                          <p className="text-sm font-semibold text-gray-700 line-clamp-1">{n.message}</p>
-                        </td>
-                        <td className="px-5 py-4">
-                          {n.deployedTanods && n.deployedTanods.length > 0
-                            ? <div className="flex flex-col gap-1">
-                                {n.deployedTanods.map((t) => (
-                                  <div key={t.uid} className="flex items-center gap-1.5">
-                                    <FiShield className="text-indigo-500 shrink-0" size={14} />
-                                    <span className="text-xs font-bold text-indigo-700">{t.name}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            : n.deployedTanodName
-                            ? <div className="flex items-center gap-1.5"><FiShield className="text-indigo-500 shrink-0" size={14} /><span className="text-xs font-bold text-indigo-700">{n.deployedTanodName}</span></div>
-                            : <span className="text-xs text-gray-400 font-semibold italic">Unassigned</span>}
-                        </td>
-                        <td className="px-5 py-4 text-sm font-semibold text-gray-800">{n.timestamp}</td>
-                        <td className="px-5 py-4">
-                          <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-bold ${status.pill}`}>{status.text}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filteredNotifications.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="text-center py-10 text-gray-500 text-sm font-bold">No complaints found</td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1080px] text-left">
+                  <thead>
+                    <tr className="bg-linear-to-r from-slate-50 via-white to-slate-50 border-b border-gray-200">
+                      {["Urgency", "Purok", "Complainant", "Issue Type", "Description", "Deployed Tanod", "Date", "Status"].map((h) => (
+                        <th key={h} className="px-5 py-4 text-xs font-extrabold tracking-wider text-gray-600 uppercase">{h}</th>
+                      ))}
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {paginatedNotifications.map((n, idx) => {
+                      const urgency = getUrgencyDisplay(n.label);
+                      const status  = getStatusDisplay(n.status);
+                      return (
+                        <tr
+                          key={n.complaintKey}
+                          className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50/70"} border-b border-gray-100 hover:bg-indigo-50/60 transition cursor-pointer`}
+                          onClick={() => setSelectedComplaint(n)}
+                        >
+                          <td className="px-5 py-4">
+                            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${urgency.pill}`}>
+                              {urgency.icon}{urgency.text}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-sm font-bold text-gray-900">Purok {n.incidentPurok}</td>
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                              {n.name}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-bold ${getIssueColor(n.type)}`}>{n.type}</span>
+                          </td>
+                          <td className="px-5 py-4 max-w-[280px]">
+                            <p className="text-sm font-semibold text-gray-700 line-clamp-1">{n.message}</p>
+                          </td>
+                          <td className="px-5 py-4">
+                            {n.deployedTanods && n.deployedTanods.length > 0
+                              ? <div className="flex flex-col gap-1">
+                                  {n.deployedTanods.map((t) => (
+                                    <div key={t.uid} className="flex items-center gap-1.5">
+                                      <FiShield className="text-indigo-500 shrink-0" size={14} />
+                                      <span className="text-xs font-bold text-indigo-700">{t.name}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              : n.deployedTanodName
+                              ? <div className="flex items-center gap-1.5"><FiShield className="text-indigo-500 shrink-0" size={14} /><span className="text-xs font-bold text-indigo-700">{n.deployedTanodName}</span></div>
+                              : <span className="text-xs text-gray-400 font-semibold italic">Unassigned</span>}
+                          </td>
+                          <td className="px-5 py-4 text-sm font-semibold text-gray-800">{n.timestamp}</td>
+                          <td className="px-5 py-4">
+                            <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-bold ${status.pill}`}>{status.text}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {paginatedNotifications.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="text-center py-10 text-gray-500 text-sm font-bold">No complaints found</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={filteredNotifications.length}
+                itemsPerPage={ITEMS_PER_PAGE}
+              />
+            </>
           )}
         </div>
 
@@ -786,10 +833,10 @@ const Notiftable = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <InfoRow icon={<FiUser size={18} />}     title="Complainant"       value={selectedComplaint.name}                     tone="indigo" />
-                  <InfoRow icon={<FiHome size={18} />}     title="Complainant Address" value={selectedComplaint.address}                  tone="blue"   />
-                  <InfoRow icon={<FiMapPin size={18} />}   title="Purok"             value={`Purok ${selectedComplaint.incidentPurok}`} tone="green"  />
-                  <InfoRow icon={<FiMapPin size={18} />}   title="Incident Location" value={selectedComplaint.incidentLocation}          tone="amber"  />
+                  <InfoRow icon={<FiUser size={18} />}     title="Complainant"         value={selectedComplaint.name}                     tone="indigo" />
+                  <InfoRow icon={<FiHome size={18} />}     title="Complainant Address"  value={selectedComplaint.address}                  tone="blue"   />
+                  <InfoRow icon={<FiMapPin size={18} />}   title="Purok"               value={`Purok ${selectedComplaint.incidentPurok}`} tone="green"  />
+                  <InfoRow icon={<FiMapPin size={18} />}   title="Incident Location"   value={selectedComplaint.incidentLocation}          tone="amber"  />
                   <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
                     <div className="flex items-start gap-3">
                       <div className="p-2.5 rounded-xl bg-purple-100 text-purple-700"><FiFileText size={18} /></div>
@@ -820,8 +867,6 @@ const Notiftable = () => {
                   <p className="text-xs font-extrabold text-gray-600 uppercase tracking-wider mb-2">Complaint Description</p>
                   <p className="text-sm font-semibold text-gray-800 leading-relaxed whitespace-pre-line">{selectedComplaint.message}</p>
                 </div>
-
-
               </div>
 
               <div className="border-t p-5 bg-white">
@@ -872,7 +917,6 @@ const Notiftable = () => {
                   </p>
                 </div>
 
-                {/* Deployment error message */}
                 {deployError && (
                   <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
                     <p className="text-xs font-extrabold text-red-700 uppercase tracking-wider">⚠ Deployment Error</p>
@@ -880,7 +924,6 @@ const Notiftable = () => {
                   </div>
                 )}
 
-                {/* Search tanods */}
                 <div className="relative">
                   <FiSearch className="absolute left-3 top-1/2 text-gray-400 -translate-y-1/2" size={16} />
                   <input
@@ -892,9 +935,8 @@ const Notiftable = () => {
                   />
                 </div>
 
-                {/* Tanod table */}
                 {filteredTanods.length === 0 ? (
-                  <p className="text-sm text-gray-500 font-semibold text-center py-6">No verified tanods available for deployment. Tanods must pass ID verification first.</p>
+                  <p className="text-sm text-gray-500 font-semibold text-center py-6">No verified tanods available for deployment.</p>
                 ) : (
                   <>
                     <div className="overflow-x-auto rounded-xl border border-gray-200">
@@ -924,13 +966,8 @@ const Notiftable = () => {
                                 }`}
                               >
                                 <td className="px-4 py-3">
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    disabled={isDeployed}
-                                    onChange={() => toggleTanod(t.uid)}
-                                    className="accent-indigo-600 w-4 h-4"
-                                  />
+                                  <input type="checkbox" checked={isSelected} disabled={isDeployed}
+                                    onChange={() => toggleTanod(t.uid)} className="accent-indigo-600 w-4 h-4" />
                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="flex items-center gap-2">
@@ -940,14 +977,10 @@ const Notiftable = () => {
                                     <span className="text-sm font-extrabold text-gray-900 truncate">{t.fullName}</span>
                                   </div>
                                 </td>
-                                <td className="px-4 py-3 text-xs font-semibold text-gray-500 capitalize">
-                                  {t.position || "Tanod"}
-                                </td>
+                                <td className="px-4 py-3 text-xs font-semibold text-gray-500 capitalize">{t.position || "Tanod"}</td>
                                 <td className="px-4 py-3">
                                   <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
-                                    isDeployed
-                                      ? "bg-red-100 text-red-700 ring-1 ring-red-200"
-                                      : "bg-green-100 text-green-700 ring-1 ring-green-200"
+                                    isDeployed ? "bg-red-100 text-red-700 ring-1 ring-red-200" : "bg-green-100 text-green-700 ring-1 ring-green-200"
                                   }`}>
                                     {isDeployed ? "Deployed" : "Verified"}
                                   </span>
@@ -959,25 +992,18 @@ const Notiftable = () => {
                       </table>
                     </div>
 
-                    {/* Pagination */}
                     {tanodTotalPages > 1 && (
                       <div className="flex items-center justify-between pt-1">
                         <p className="text-xs font-semibold text-gray-500">
                           Page {tanodPage} of {tanodTotalPages} · {filteredTanods.length} tanod{filteredTanods.length !== 1 ? "s" : ""}
                         </p>
                         <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => setTanodPage((p) => Math.max(1, p - 1))}
-                            disabled={tanodPage <= 1}
-                            className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                          >
+                          <button onClick={() => setTanodPage((p) => Math.max(1, p - 1))} disabled={tanodPage <= 1}
+                            className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition">
                             <FiChevronLeft size={16} />
                           </button>
-                          <button
-                            onClick={() => setTanodPage((p) => Math.min(tanodTotalPages, p + 1))}
-                            disabled={tanodPage >= tanodTotalPages}
-                            className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                          >
+                          <button onClick={() => setTanodPage((p) => Math.min(tanodTotalPages, p + 1))} disabled={tanodPage >= tanodTotalPages}
+                            className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition">
                             <FiChevronRight size={16} />
                           </button>
                         </div>
@@ -1006,19 +1032,14 @@ const Notiftable = () => {
                   <p className="text-xs font-bold text-amber-600">Select at least {MIN_TANODS} tanods to deploy.</p>
                 )}
                 <div className="flex gap-3">
-                  <button
-                    onClick={() => { setShowDeployModal(false); setDeployError(""); }}
-                    className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition"
-                  >
+                  <button onClick={() => { setShowDeployModal(false); setDeployError(""); }}
+                    className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition">
                     Cancel
                   </button>
-                  <button
-                    onClick={confirmDeploy}
-                    disabled={selectedTanods.size < MIN_TANODS || deploying}
+                  <button onClick={confirmDeploy} disabled={selectedTanods.size < MIN_TANODS || deploying}
                     className={`flex-1 py-3 rounded-xl text-white font-extrabold text-sm transition shadow-md ${
                       selectedTanods.size < MIN_TANODS || deploying ? "bg-gray-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
-                    }`}
-                  >
+                    }`}>
                     {deploying ? "Deploying…" : `Deploy ${selectedTanods.size} Tanod${selectedTanods.size !== 1 ? "s" : ""} →`}
                   </button>
                 </div>
@@ -1039,24 +1060,14 @@ const Notiftable = () => {
 
         {/* ── Image Preview ─────────────────────────────────────────────────── */}
         {previewImage && (
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-80 p-4"
-            onClick={() => setPreviewImage(null)}
-          >
-            <img
-              src={previewImage}
-              alt="Preview"
-              className="max-w-[92%] max-h-[92%] rounded-2xl shadow-2xl border border-white/20"
-            />
-            <button
-              className="absolute top-6 right-6 text-white text-4xl font-extrabold"
-              onClick={() => setPreviewImage(null)}
-            >
-              ✖
-            </button>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-80 p-4"
+            onClick={() => setPreviewImage(null)}>
+            <img src={previewImage} alt="Preview"
+              className="max-w-[92%] max-h-[92%] rounded-2xl shadow-2xl border border-white/20" />
+            <button className="absolute top-6 right-6 text-white text-4xl font-extrabold"
+              onClick={() => setPreviewImage(null)}>✖</button>
           </div>
         )}
-
       </div>
     </div>
   );
@@ -1093,6 +1104,7 @@ const InfoRow = ({ icon, title, value, tone }) => {
     green:  "bg-green-100 text-green-700",
     amber:  "bg-amber-100 text-amber-700",
     orange: "bg-orange-100 text-orange-700",
+    blue:   "bg-blue-100 text-blue-700",
   }[tone] || "bg-indigo-100 text-indigo-700";
   return (
     <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">

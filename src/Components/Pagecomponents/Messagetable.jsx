@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   FiMail, FiX, FiSearch, FiSend, FiMapPin,
   FiFileText, FiMessageSquare, FiBell, FiCheck,
+  FiChevronLeft, FiChevronRight,
 } from "react-icons/fi";
 import {
   getFirestore,
@@ -12,11 +13,11 @@ import {
   doc,
   updateDoc,
   serverTimestamp,
-  Timestamp,
 } from "firebase/firestore";
 import app from "../../firebaseConfig";
 
 const firestore = getFirestore(app);
+const PAGE_SIZE = 10;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatTimestamp = (ts) => {
@@ -40,25 +41,99 @@ const getIssueColor = (type) => {
 
 const getStatusDisplay = (status) => ({
   unread: { color: "bg-yellow-100 text-yellow-800 border-yellow-200", text: "Unread" },
-  read:   { color: "bg-emerald-100 text-emerald-800 border-emerald-200", text: "Read"   },
+  read:   { color: "bg-emerald-100 text-emerald-800 border-emerald-200", text: "Read" },
 }[status] || { color: "bg-yellow-100 text-yellow-800 border-yellow-200", text: "Unread" });
+
+// ── Pagination Component ──────────────────────────────────────────────────────
+const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSize }) => {
+  if (totalPages <= 1) return null;
+
+  const from = (currentPage - 1) * pageSize + 1;
+  const to = Math.min(currentPage * pageSize, totalItems);
+
+  const pages = [];
+  const delta = 1;
+  const left = currentPage - delta;
+  const right = currentPage + delta;
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= left && i <= right)) {
+      pages.push(i);
+    } else if (i === left - 1 || i === right + 1) {
+      pages.push("...");
+    }
+  }
+
+  const dedupedPages = pages.filter(
+    (p, idx) => !(p === "..." && pages[idx - 1] === "...")
+  );
+
+  const btnBase = "inline-flex items-center justify-center w-8 h-8 rounded-lg text-xs font-extrabold border transition";
+  const activeBtn = "bg-indigo-600 text-white border-indigo-600 shadow";
+  const inactiveBtn = "bg-white text-gray-700 border-gray-200 hover:bg-gray-50";
+  const disabledBtn = "bg-white text-gray-300 border-gray-100 cursor-not-allowed";
+
+  return (
+    <div className="flex items-center justify-between px-6 py-3 border-t border-gray-100 bg-white/60">
+      <p className="text-xs font-semibold text-gray-500">
+        Showing <span className="font-extrabold text-gray-700">{from}–{to}</span> of{" "}
+        <span className="font-extrabold text-gray-700">{totalItems}</span>
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className={`${btnBase} ${currentPage === 1 ? disabledBtn : inactiveBtn}`}
+        >
+          <FiChevronLeft size={14} />
+        </button>
+        {dedupedPages.map((p, idx) =>
+          p === "..." ? (
+            <span key={`ellipsis-${idx}`} className="w-8 text-center text-xs text-gray-400 font-bold">…</span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onPageChange(p)}
+              className={`${btnBase} ${currentPage === p ? activeBtn : inactiveBtn}`}
+            >
+              {p}
+            </button>
+          )
+        )}
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className={`${btnBase} ${currentPage === totalPages ? disabledBtn : inactiveBtn}`}
+        >
+          <FiChevronRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // ── Main Component ────────────────────────────────────────────────────────────
 const MessageTable = () => {
   const [filter, setFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [conversations, setConversations] = useState([]);
-  const [selectedUser, setSelectedUser] = useState(null);       // { userId, name }
+  const [selectedUser, setSelectedUser] = useState(null);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [reply, setReply] = useState("");
   const messagesEndRef = useRef(null);
 
-  // ── Firestore listener ──────────────────────────────────────────────────────
+  // Pagination state — separate pages for users list and complaints list
+  const [userPage, setUserPage] = useState(1);
+  const [complaintPage, setComplaintPage] = useState(1);
+
+  // Reset pages when filters/search/selection change
+  useEffect(() => { setUserPage(1); }, [searchTerm, filter]);
+  useEffect(() => { setComplaintPage(1); }, [selectedUser, searchTerm, filter]);
+
+  // ── Firestore listener ────────────────────────────────────────────────────
   useEffect(() => {
     const usersRef = collection(firestore, "users");
     const innerUnsubs = [];
-
-    // convoMap: complaintId -> conversation object
     const convoMap = {};
 
     const rebuild = () => {
@@ -82,9 +157,9 @@ const MessageTable = () => {
 
         const unsubComplaints = onSnapshot(complaintsRef, (complaintsSnap) => {
           complaintsSnap.forEach((cDoc) => {
-            const complaint    = cDoc.data();
-            const complaintId  = cDoc.id;
-            const chatRef      = collection(firestore, "users", userId, "userComplaints", complaintId, "chat");
+            const complaint   = cDoc.data();
+            const complaintId = cDoc.id;
+            const chatRef     = collection(firestore, "users", userId, "userComplaints", complaintId, "chat");
 
             const unsubChat = onSnapshot(chatRef, (chatSnap) => {
               const messages = [];
@@ -92,34 +167,32 @@ const MessageTable = () => {
                 messages.push({ id: msgDoc.id, ...msgDoc.data() });
               });
 
-              // Sort messages by timestamp ascending
               messages.sort((a, b) => {
                 const ta = a.timestamp?.toDate?.() || new Date(a.timestamp || 0);
                 const tb = b.timestamp?.toDate?.() || new Date(b.timestamp || 0);
                 return ta - tb;
               });
 
-              const lastMsg      = messages.length > 0 ? messages[messages.length - 1] : null;
-              const unreadCount  = messages.filter((m) => m.senderId !== "admin" && m.read === false).length;
+              const lastMsg     = messages.length > 0 ? messages[messages.length - 1] : null;
+              const unreadCount = messages.filter((m) => m.senderId !== "admin" && m.read === false).length;
 
               convoMap[complaintId] = {
-                id:           complaintId,
+                id:          complaintId,
                 userId,
                 complaintId,
-                complainant:  fullName,
-                purok:        complaint.incidentPurok || complaint.purok || userData.purok || "—",
-                issueType:    complaint.type    || "—",
-                description:  complaint.message || "—",
+                complainant: fullName,
+                purok:       complaint.incidentPurok || complaint.purok || userData.purok || "—",
+                issueType:   complaint.type    || "—",
+                description: complaint.message || "—",
                 messages,
-                status:       unreadCount > 0 ? "unread" : "read",
-                lastMessage:  lastMsg ? formatTimestamp(lastMsg.timestamp) ? `${lastMsg.message}` : lastMsg.message : "No messages yet",
-                hasMessages:  messages.length > 0,
+                status:      unreadCount > 0 ? "unread" : "read",
+                lastMessage: lastMsg ? `${lastMsg.message}` : "No messages yet",
+                hasMessages: messages.length > 0,
                 unreadCount,
               };
 
               rebuild();
 
-              // Keep selectedConversation in sync
               setSelectedConversation((prev) => {
                 if (!prev || prev.complaintId !== complaintId) return prev;
                 return { ...convoMap[complaintId] };
@@ -140,14 +213,14 @@ const MessageTable = () => {
     };
   }, []);
 
-  // ── Stats ───────────────────────────────────────────────────────────────────
+  // ── Stats ─────────────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
     users:  new Set(conversations.map((c) => c.userId)).size,
     total:  conversations.length,
     unread: conversations.filter((c) => c.status === "unread").length,
   }), [conversations]);
 
-  // ── Filtered list ───────────────────────────────────────────────────────────
+  // ── Filtered list ─────────────────────────────────────────────────────────
   const filteredConversations = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return conversations.filter((c) => {
@@ -162,7 +235,7 @@ const MessageTable = () => {
     });
   }, [conversations, filter, searchTerm]);
 
-  // ── Group by user ──────────────────────────────────────────────────────────
+  // ── Group by user ─────────────────────────────────────────────────────────
   const groupedByUser = useMemo(() => {
     const map = {};
     filteredConversations.forEach((c) => {
@@ -180,17 +253,29 @@ const MessageTable = () => {
     return list;
   }, [filteredConversations]);
 
-  // ── Complaints for the selected user ───────────────────────────────────────
+  // ── Complaints for selected user ──────────────────────────────────────────
   const userComplaints = useMemo(() => {
     if (!selectedUser) return [];
     return filteredConversations.filter((c) => c.userId === selectedUser.userId);
   }, [filteredConversations, selectedUser]);
 
-  // ── Open conversation + mark messages read ──────────────────────────────────
+  // ── Paginated slices ──────────────────────────────────────────────────────
+  const userTotalPages = Math.max(1, Math.ceil(groupedByUser.length / PAGE_SIZE));
+  const paginatedUsers = useMemo(() => {
+    const start = (userPage - 1) * PAGE_SIZE;
+    return groupedByUser.slice(start, start + PAGE_SIZE);
+  }, [groupedByUser, userPage]);
+
+  const complaintTotalPages = Math.max(1, Math.ceil(userComplaints.length / PAGE_SIZE));
+  const paginatedComplaints = useMemo(() => {
+    const start = (complaintPage - 1) * PAGE_SIZE;
+    return userComplaints.slice(start, start + PAGE_SIZE);
+  }, [userComplaints, complaintPage]);
+
+  // ── Open conversation + mark messages read ────────────────────────────────
   const openConversation = async (conversation) => {
     setSelectedConversation(conversation);
     const { userId, complaintId, messages } = conversation;
-
     try {
       const unread = messages.filter((m) => m.senderId !== "admin" && m.read === false);
       for (const msg of unread) {
@@ -204,20 +289,14 @@ const MessageTable = () => {
     }
   };
 
-  // ── Send reply ──────────────────────────────────────────────────────────────
+  // ── Send reply ────────────────────────────────────────────────────────────
   const handleSendReply = async () => {
     if (!reply.trim() || !selectedConversation) return;
     const { userId, complaintId } = selectedConversation;
-
     try {
       await addDoc(
         collection(firestore, "users", userId, "userComplaints", complaintId, "chat"),
-        {
-          senderId:  "admin",
-          message:   reply.trim(),
-          timestamp: serverTimestamp(),
-          read:      false,
-        }
+        { senderId: "admin", message: reply.trim(), timestamp: serverTimestamp(), read: false }
       );
       setReply("");
     } catch (err) {
@@ -225,7 +304,7 @@ const MessageTable = () => {
     }
   };
 
-  // ── Auto-scroll ─────────────────────────────────────────────────────────────
+  // ── Auto-scroll ───────────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [selectedConversation?.messages?.length]);
@@ -237,7 +316,7 @@ const MessageTable = () => {
     }
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       <div
@@ -309,19 +388,22 @@ const MessageTable = () => {
           {/* Back button when viewing a user's complaints */}
           {selectedUser && (
             <div className="px-6 py-3 border-b border-gray-100 bg-slate-50 flex items-center gap-3">
-              <button onClick={() => setSelectedUser(null)}
+              <button
+                onClick={() => { setSelectedUser(null); setComplaintPage(1); }}
                 className="text-indigo-600 hover:text-indigo-800 font-extrabold text-sm flex items-center gap-1 transition">
                 ← Back to Users
               </button>
               <span className="text-gray-400">|</span>
               <span className="text-sm font-bold text-gray-800">{selectedUser.name}</span>
-              <span className="text-xs text-gray-400 font-semibold">— {userComplaints.length} complaint{userComplaints.length !== 1 ? "s" : ""}</span>
+              <span className="text-xs text-gray-400 font-semibold">
+                — {userComplaints.length} complaint{userComplaints.length !== 1 ? "s" : ""}
+              </span>
             </div>
           )}
 
           <div className="overflow-x-auto">
             {!selectedUser ? (
-              /* ── User List ───────────────────────────────────────────── */
+              /* ── User List ─────────────────────────────────────────────── */
               <table className="w-full min-w-[600px] text-left">
                 <thead className="bg-white sticky top-0 z-10">
                   <tr className="border-b border-gray-200">
@@ -331,7 +413,7 @@ const MessageTable = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {groupedByUser.map((u, idx) => (
+                  {paginatedUsers.map((u, idx) => (
                     <tr key={u.userId}
                       className={`border-b border-gray-100 transition cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-indigo-50/50`}
                       onClick={() => setSelectedUser({ userId: u.userId, name: u.name })}>
@@ -376,7 +458,7 @@ const MessageTable = () => {
                 </tbody>
               </table>
             ) : (
-              /* ── Complaints for selected user ────────────────────────── */
+              /* ── Complaints for selected user ──────────────────────────── */
               <table className="w-full min-w-[980px] text-left">
                 <thead className="bg-white sticky top-0 z-10">
                   <tr className="border-b border-gray-200">
@@ -386,7 +468,7 @@ const MessageTable = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {userComplaints.map((c, idx) => {
+                  {paginatedComplaints.map((c, idx) => {
                     const status = getStatusDisplay(c.status);
                     return (
                       <tr key={c.id}
@@ -433,7 +515,27 @@ const MessageTable = () => {
               </table>
             )}
           </div>
-          <div className="px-6 py-4 text-xs text-gray-500 font-semibold border-t border-gray-100">
+
+          {/* Pagination */}
+          {!selectedUser ? (
+            <Pagination
+              currentPage={userPage}
+              totalPages={userTotalPages}
+              onPageChange={setUserPage}
+              totalItems={groupedByUser.length}
+              pageSize={PAGE_SIZE}
+            />
+          ) : (
+            <Pagination
+              currentPage={complaintPage}
+              totalPages={complaintTotalPages}
+              onPageChange={setComplaintPage}
+              totalItems={userComplaints.length}
+              pageSize={PAGE_SIZE}
+            />
+          )}
+
+          <div className="px-6 py-3 text-xs text-gray-500 font-semibold border-t border-gray-100">
             {!selectedUser ? "Click a user to view their complaints." : "Click a complaint to open the conversation."}
           </div>
         </div>

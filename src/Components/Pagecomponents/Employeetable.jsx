@@ -10,6 +10,8 @@ import {
   FiPlus,
   FiEye,
   FiEyeOff,
+  FiChevronLeft,
+  FiChevronRight,
 } from "react-icons/fi";
 import {
   collection,
@@ -25,6 +27,7 @@ import { firestore as db } from "../../firebaseConfig";
 const emptyForm = { firstName: "", lastName: "", middleName: "", suffix: "", position: "BARANGAY UTILITY", email: "", password: "", number: "", purok: "", address: "" };
 
 const API_URL = "http://localhost:5000";
+const PAGE_SIZE = 10;
 
 const capitalize = (str) => {
   if (!str) return str;
@@ -45,49 +48,116 @@ const positionOptions = [
   "LUPON TAGAPAMAYAPA",
 ];
 
+// ── Pagination Component ──────────────────────────────────────────────────────
+const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSize }) => {
+  if (totalPages <= 1) return null;
+
+  const from = (currentPage - 1) * pageSize + 1;
+  const to = Math.min(currentPage * pageSize, totalItems);
+
+  const pages = [];
+  const delta = 1;
+  const left = currentPage - delta;
+  const right = currentPage + delta;
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= left && i <= right)) {
+      pages.push(i);
+    } else if (i === left - 1 || i === right + 1) {
+      pages.push("...");
+    }
+  }
+
+  const dedupedPages = pages.filter(
+    (p, idx) => !(p === "..." && pages[idx - 1] === "...")
+  );
+
+  const btnBase = `inline-flex items-center justify-center w-8 h-8 rounded-lg text-xs font-extrabold border transition`;
+  const activeBtn = "bg-indigo-600 text-white border-indigo-600 shadow";
+  const inactiveBtn = "bg-white text-gray-700 border-gray-200 hover:bg-gray-50";
+  const disabledBtn = "bg-white text-gray-300 border-gray-100 cursor-not-allowed";
+
+  return (
+    <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 bg-white">
+      <p className="text-xs font-semibold text-gray-500">
+        Showing <span className="font-extrabold text-gray-700">{from}–{to}</span> of{" "}
+        <span className="font-extrabold text-gray-700">{totalItems}</span> employees
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className={`${btnBase} ${currentPage === 1 ? disabledBtn : inactiveBtn}`}
+        >
+          <FiChevronLeft size={14} />
+        </button>
+        {dedupedPages.map((p, idx) =>
+          p === "..." ? (
+            <span key={`ellipsis-${idx}`} className="w-8 text-center text-xs text-gray-400 font-bold">…</span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onPageChange(p)}
+              className={`${btnBase} ${currentPage === p ? activeBtn : inactiveBtn}`}
+            >
+              {p}
+            </button>
+          )
+        )}
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className={`${btnBase} ${currentPage === totalPages ? disabledBtn : inactiveBtn}`}
+        >
+          <FiChevronRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function EmployeeTable() {
   const [employees, setEmployees] = useState([]);
-  const [feedbackMap, setFeedbackMap] = useState({}); // { employeeId: [feedback, ...] }
+  const [feedbackMap, setFeedbackMap] = useState({});
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [selectedEmployeeForFeedback, setSelectedEmployeeForFeedback] = useState(null);
   const [form, setForm] = useState(emptyForm);
-  const [editing, setEditing] = useState(null); // doc id being edited
+  const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false); // confirmation modal
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [filter, setFilter] = useState("all");
   const [positionFilter, setPositionFilter] = useState("All Positions");
 
-  // ─── Fetch employees from Firestore (isEmployee === true AND idstatus === "verified") ───────────────────
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset page when filters/search change
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, filter, positionFilter]);
+
+  // ── Fetch employees ───────────────────────────────────────────────────────
   useEffect(() => {
     const empCol = collection(db, "employee");
     const empQuery = query(empCol, where("isEmployee", "==", true), where("idstatus", "==", "verified"));
 
     const unsubscribe = onSnapshot(empQuery, (snapshot) => {
-      const list = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-
-      // Sort by lastName then firstName
+      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       list.sort((a, b) => {
         const ln = (a.lastName || "").localeCompare(b.lastName || "");
         if (ln !== 0) return ln;
         return (a.firstName || "").localeCompare(b.firstName || "");
       });
-
       setEmployees(list);
     });
 
     return () => unsubscribe();
   }, []);
 
-  // ─── Fetch feedback from employee deploymentHistory ───────────────────────
-  // Each deployment can have tanodComment and tanodRating
+  // ── Fetch feedback ────────────────────────────────────────────────────────
   useEffect(() => {
     const employeeRef = collection(db, "employee");
     const innerUnsubs = [];
@@ -97,12 +167,11 @@ export default function EmployeeTable() {
       employeeSnapshot.forEach((empDoc) => {
         const empId = empDoc.id;
         const deploymentHistoryRef = collection(db, "employee", empId, "deploymentHistory");
-        
+
         const unsubHistory = onSnapshot(deploymentHistoryRef, (historySnap) => {
           const empFeedbacks = [];
           historySnap.forEach((histDoc) => {
             const histData = histDoc.data();
-            // Extract feedback from this deployment record
             if (histData.tanodRating || histData.tanodComment) {
               empFeedbacks.push({
                 id: histDoc.id,
@@ -126,22 +195,18 @@ export default function EmployeeTable() {
     };
   }, []);
 
-  // ─── Clear email and password when not editing (to prevent browser remember) ──────
   useEffect(() => {
     if (!editing) {
       setForm((prev) => ({ ...prev, email: "", password: "" }));
     }
   }, [editing]);
 
-  // ─── Compute rating per employee ────────────────────────────────────────────
+  // ── Computed ──────────────────────────────────────────────────────────────
   const employeesWithRating = useMemo(() => {
     return employees.map((e) => {
       const feedbacks = feedbackMap[e.id] || [];
       const ratings = feedbacks
-        .map((f) => {
-          const n = Number(f.rating);
-          return !isNaN(n) && n > 0 ? n : null;
-        })
+        .map((f) => { const n = Number(f.rating); return !isNaN(n) && n > 0 ? n : null; })
         .filter((r) => r !== null);
 
       const rating =
@@ -153,7 +218,6 @@ export default function EmployeeTable() {
     });
   }, [employees, feedbackMap]);
 
-  // ─── Derived stats ──────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
     total: employeesWithRating.length,
     highRated: employeesWithRating.filter((e) => e.rating !== null && e.rating >= 4).length,
@@ -161,32 +225,31 @@ export default function EmployeeTable() {
     noRating: employeesWithRating.filter((e) => e.rating === null).length,
   }), [employeesWithRating]);
 
-  // ─── Filtering ──────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return employeesWithRating.filter((e) => {
       const fullName = `${e.firstName || ""} ${e.middleName || ""} ${e.lastName || ""}`.toLowerCase();
-      const matchesSearch =
-        fullName.includes(term) || (e.position || "").toLowerCase().includes(term);
-
+      const matchesSearch = fullName.includes(term) || (e.position || "").toLowerCase().includes(term);
       const matchesFilter =
         filter === "all" ||
         (filter === "highRated" && e.rating !== null && e.rating >= 4) ||
         (filter === "lowRated" && e.rating !== null && e.rating < 4) ||
         (filter === "noRating" && e.rating === null);
-
-      const matchesPosition =
-        positionFilter === "All Positions" || e.position === positionFilter;
-
+      const matchesPosition = positionFilter === "All Positions" || e.position === positionFilter;
       return matchesSearch && matchesFilter && matchesPosition;
     });
   }, [employeesWithRating, searchTerm, filter, positionFilter]);
 
-  // ─── Helpers ────────────────────────────────────────────────────────────────
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, currentPage]);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
   const getFullName = (e) =>
-    [e.firstName, e.middleName ? e.middleName + "." : "", e.lastName]
-      .filter(Boolean)
-      .join(" ");
+    [e.firstName, e.middleName ? e.middleName + "." : "", e.lastName].filter(Boolean).join(" ");
 
   const getRatingBadge = (rating) => {
     if (rating === null || rating === undefined) return "bg-slate-100 text-slate-700 border-slate-200";
@@ -204,8 +267,7 @@ export default function EmployeeTable() {
     return "Needs Improvement";
   };
 
-  // ─── CRUD ───────────────────────────────────────────────────────────────────
-  // ─── Validation ──────────────────────────────────────────────────────────
+  // ── CRUD ──────────────────────────────────────────────────────────────────
   const validateForm = () => {
     const errors = {};
     if (!form.firstName.trim()) errors.firstName = "First name is required.";
@@ -246,11 +308,7 @@ export default function EmployeeTable() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || "Failed to create employee.");
-        return;
-      }
-      // Set idstatus to null in Firestore so the employee appears in Validations table
+      if (!res.ok) { alert(data.error || "Failed to create employee."); return; }
       if (data.employeeId || data.uid) {
         const empId = data.employeeId || data.uid;
         await updateDoc(doc(db, "employee", empId), { idstatus: null });
@@ -283,14 +341,12 @@ export default function EmployeeTable() {
 
   const saveEdit = async () => {
     if (!editing) return;
-
     await updateDoc(doc(db, "employee", editing), {
       position: form.position,
       number: form.number.trim(),
       purok: form.purok.trim(),
       address: form.address.trim(),
     });
-
     setEditing(null);
     setForm(emptyForm);
   };
@@ -302,20 +358,16 @@ export default function EmployeeTable() {
 
   const openFeedbackModal = (employee) => {
     const feedbacks = feedbackMap[employee.id] || [];
-    const rating = feedbacks.length > 0 
+    const rating = feedbacks.length > 0
       ? (feedbacks.reduce((sum, fb) => sum + (fb.rating || 0), 0) / feedbacks.length).toFixed(1)
       : 0;
-    setSelectedEmployeeForFeedback({ 
-      ...employee, 
-      feedbacks,
-      rating 
-    });
+    setSelectedEmployeeForFeedback({ ...employee, feedbacks, rating });
     setShowFeedbackModal(true);
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="relative min-h-screen linear from-slate-50 via-indigo-50 to-blue-50">
-      {/* Watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -338,15 +390,10 @@ export default function EmployeeTable() {
                 <FiUser size={20} />
               </div>
               <div>
-                <h1 className="text-lg md:text-xl font-extrabold text-gray-900">
-                  Barangay Employees Directory
-                </h1>
-                <p className="text-sm text-gray-600 font-semibold">
-                  Manage employees and view citizen feedback ratings.
-                </p>
+                <h1 className="text-lg md:text-xl font-extrabold text-gray-900">Barangay Employees Directory</h1>
+                <p className="text-sm text-gray-600 font-semibold">Manage employees and view citizen feedback ratings.</p>
               </div>
             </div>
-
             <div className="relative w-full md:w-[420px]">
               <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -372,20 +419,15 @@ export default function EmployeeTable() {
         <div className="bg-white/80 backdrop-blur rounded-2xl shadow-xl border border-white/60 p-5 md:p-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-              <div className="text-xs font-extrabold uppercase tracking-wider text-gray-600">
-                Position
-              </div>
+              <div className="text-xs font-extrabold uppercase tracking-wider text-gray-600">Position</div>
               <select
                 value={positionFilter}
                 onChange={(e) => setPositionFilter(e.target.value)}
                 className="border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                {positionOptions.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
+                {positionOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
               </select>
             </div>
-
             <div className="flex flex-wrap gap-2">
               <ChipButton active={filter === "all"} onClick={() => setFilter("all")} label={`All (${stats.total})`} />
               <ChipButton active={filter === "highRated"} onClick={() => setFilter("highRated")} label={`High Rated (${stats.highRated})`} />
@@ -444,9 +486,8 @@ export default function EmployeeTable() {
               </div>
               <div className="md:col-span-3">
                 <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Position</label>
-                <select value={form.position}
-                  onChange={(e) => setForm({ ...form, position: e.target.value })}
-                  className={`w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500`}>
+                <select value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                   {positionOptions.filter((p) => p !== "All Positions").map((p) => (
                     <option key={p} value={p}>{p}</option>
                   ))}
@@ -464,8 +505,7 @@ export default function EmployeeTable() {
               </div>
               <div className="md:col-span-2">
                 <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Purok</label>
-                <select value={form.purok}
-                  onChange={(e) => setForm({ ...form, purok: e.target.value })}
+                <select value={form.purok} onChange={(e) => setForm({ ...form, purok: e.target.value })}
                   className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                   <option value="">Select</option>
                   {["1","2","3","4","5","6"].map((v) => <option key={v} value={v}>{v}</option>)}
@@ -478,7 +518,6 @@ export default function EmployeeTable() {
                   className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
 
-              {/* Email + Password — only when creating */}
               {!editing && (
                 <>
                   <div className="md:col-span-2">
@@ -571,10 +610,7 @@ export default function EmployeeTable() {
               <thead className="bg-white sticky top-0 z-10">
                 <tr className="border-b border-gray-200">
                   {["Name", "Position", "Rating", "Feedback", "Actions"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-6 py-4 text-left text-[11px] font-extrabold uppercase tracking-wider text-gray-600"
-                    >
+                    <th key={h} className="px-6 py-4 text-left text-[11px] font-extrabold uppercase tracking-wider text-gray-600">
                       {h}
                     </th>
                   ))}
@@ -582,22 +618,15 @@ export default function EmployeeTable() {
               </thead>
 
               <tbody>
-                {filtered.map((e, idx) => (
-                  <tr
-                    key={e.id}
-                    className={`border-b border-gray-100 transition-colors ${
-                      idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
-                    } hover:bg-indigo-50/60`}
-                  >
+                {paginated.map((e, idx) => (
+                  <tr key={e.id}
+                    className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-indigo-50/60`}>
                     {/* Name */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {e.avatar ? (
-                          <img 
-                            src={e.avatar} 
-                            alt={getFullName(e)} 
-                            className="w-9 h-9 rounded-xl object-cover shrink-0 ring-2 ring-indigo-200"
-                          />
+                          <img src={e.avatar} alt={getFullName(e)}
+                            className="w-9 h-9 rounded-xl object-cover shrink-0 ring-2 ring-indigo-200" />
                         ) : (
                           <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
                             <FiUser />
@@ -618,26 +647,20 @@ export default function EmployeeTable() {
                     {/* Rating */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-extrabold rounded-full border ${getRatingBadge(e.rating)}`}
-                        >
+                        <span className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-extrabold rounded-full border ${getRatingBadge(e.rating)}`}>
                           <FiStar className="text-yellow-500" />
                           {e.rating !== null ? `${e.rating.toFixed(1)}` : "No rating"}
                         </span>
                         {e.rating !== null && (
-                          <span className="text-xs font-semibold text-gray-500">
-                            {ratingLabel(e.rating)}
-                          </span>
+                          <span className="text-xs font-semibold text-gray-500">{ratingLabel(e.rating)}</span>
                         )}
                       </div>
                     </td>
 
                     {/* Feedback */}
                     <td className="px-6 py-4">
-                      <button
-                        onClick={() => setSelectedEmployee(e)}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-indigo-700 font-extrabold text-xs shadow-sm transition"
-                      >
+                      <button onClick={() => setSelectedEmployee(e)}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-indigo-700 font-extrabold text-xs shadow-sm transition">
                         <FiMessageCircle />
                         {e.feedbacks.length} {e.feedbacks.length === 1 ? "feedback" : "feedbacks"}
                       </button>
@@ -646,16 +669,12 @@ export default function EmployeeTable() {
                     {/* Actions */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => startEdit(e)}
-                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 font-extrabold text-xs transition shadow-sm"
-                        >
+                        <button onClick={() => startEdit(e)}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 font-extrabold text-xs transition shadow-sm">
                           <FiEdit2 /> Edit
                         </button>
-                        <button
-                          onClick={() => deleteEmployee(e.id)}
-                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 font-extrabold text-xs transition shadow-sm"
-                        >
+                        <button onClick={() => deleteEmployee(e.id)}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 font-extrabold text-xs transition shadow-sm">
                           <FiTrash2 /> Delete
                         </button>
                       </div>
@@ -665,36 +684,33 @@ export default function EmployeeTable() {
 
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center py-12 text-gray-500 font-semibold">
-                      No employees found.
-                    </td>
+                    <td colSpan={5} className="text-center py-12 text-gray-500 font-semibold">No employees found.</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
 
-          <div className="px-6 py-4 border-t border-gray-200 text-xs text-gray-500 font-semibold bg-white">
-            Showing <span className="text-gray-800 font-extrabold">{filtered.length}</span> of{" "}
-            <span className="text-gray-800 font-extrabold">{employeesWithRating.length}</span> employees
-          </div>
+          {/* Pagination */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={filtered.length}
+            pageSize={PAGE_SIZE}
+          />
         </div>
 
         {selectedEmployee && (
           <FeedbackModal employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} />
         )}
 
-        {/* ── View Employee Feedback Modal ─────────────────────────────────── */}
+        {/* View Employee Feedback Modal */}
         {showFeedbackModal && selectedEmployeeForFeedback && (
-          <div
-            className="fixed inset-0 z-70 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
-            onClick={() => setShowFeedbackModal(false)}
-          >
-            <div
-              className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
+          <div className="fixed inset-0 z-70 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
+            onClick={() => setShowFeedbackModal(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}>
               <div className="px-6 py-5 flex items-center justify-between bg-linear-to-r from-indigo-600 to-purple-600 shrink-0">
                 <div className="flex items-center gap-3 text-white">
                   <div className="bg-white/20 p-2.5 rounded-xl"><FiStar size={20} /></div>
@@ -703,20 +719,13 @@ export default function EmployeeTable() {
                     <p className="text-indigo-100 text-xs font-semibold mt-0.5">{getFullName(selectedEmployeeForFeedback)}</p>
                   </div>
                 </div>
-                <button
-                  className="text-white/80 hover:text-white hover:bg-white/15 rounded-full p-2 transition"
-                  onClick={() => setShowFeedbackModal(false)}
-                >
-                  ✕
-                </button>
+                <button className="text-white/80 hover:text-white hover:bg-white/15 rounded-full p-2 transition"
+                  onClick={() => setShowFeedbackModal(false)}>✕</button>
               </div>
-
-              {/* Body */}
               <div className="p-6 overflow-y-auto space-y-4 flex-1">
                 {selectedEmployeeForFeedback.feedbacks && selectedEmployeeForFeedback.feedbacks.length > 0 ? (
                   <>
-                    {/* Summary */}
-                    <div className="rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 p-5 border border-indigo-100">
+                    <div className="rounded-xl bg-linear-to-br from-indigo-50 to-purple-50 p-5 border border-indigo-100">
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <p className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider mb-2">Average Rating</p>
@@ -729,34 +738,24 @@ export default function EmployeeTable() {
                         </div>
                       </div>
                     </div>
-
-                    {/* Feedback List */}
                     <div className="space-y-3">
                       {selectedEmployeeForFeedback.feedbacks.map((fb, idx) => (
                         <div key={fb.id || idx} className="rounded-xl border border-gray-200 bg-slate-50 p-4">
-                          {/* Complaint Details */}
                           <div className="mb-3 pb-3 border-b border-gray-200">
                             <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1">Complaint</p>
                             <p className="text-sm text-gray-700 font-semibold">Anonymous Citizen - {fb.complaint || "—"}</p>
                           </div>
-
-                          {/* Tanod Comment/Feedback */}
                           {fb.comment && (
                             <div className="mb-3 pb-3 border-b border-gray-200">
                               <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1">Feedback</p>
                               <p className="text-sm text-gray-700">{fb.comment}</p>
                             </div>
                           )}
-
-                          {/* Rating Display */}
                           <div className="flex items-center justify-between">
                             <div className="flex gap-1">
-                              {[1, 2, 3, 4, 5].map((n) => (
-                                <FiStar
-                                  key={n}
-                                  size={16}
-                                  className={n <= (fb.rating || 0) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}
-                                />
+                              {[1,2,3,4,5].map((n) => (
+                                <FiStar key={n} size={16}
+                                  className={n <= (fb.rating || 0) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"} />
                               ))}
                             </div>
                             <p className="text-sm font-bold text-indigo-600">{fb.rating || 0}/5</p>
@@ -780,15 +779,13 @@ export default function EmployeeTable() {
   );
 }
 
-/* =======================
-   UI Sub-components
-======================= */
+/* ── UI Sub-components ───────────────────────────────────────────────────── */
 function StatCard({ title, value, tone = "indigo" }) {
   const tones = {
-    indigo: { ring: "ring-indigo-200", icon: "bg-indigo-600", glow: "bg-indigo-500/15" },
+    indigo:  { ring: "ring-indigo-200",  icon: "bg-indigo-600",  glow: "bg-indigo-500/15"  },
     emerald: { ring: "ring-emerald-200", icon: "bg-emerald-600", glow: "bg-emerald-500/15" },
-    amber: { ring: "ring-amber-200", icon: "bg-amber-600", glow: "bg-amber-500/15" },
-    slate: { ring: "ring-slate-200", icon: "bg-slate-600", glow: "bg-slate-500/15" },
+    amber:   { ring: "ring-amber-200",   icon: "bg-amber-600",   glow: "bg-amber-500/15"   },
+    slate:   { ring: "ring-slate-200",   icon: "bg-slate-600",   glow: "bg-slate-500/15"   },
   };
   const t = tones[tone] || tones.indigo;
 
@@ -812,40 +809,30 @@ function StatCard({ title, value, tone = "indigo" }) {
 
 function ChipButton({ active, onClick, label }) {
   return (
-    <button
-      onClick={onClick}
+    <button onClick={onClick}
       className={`px-4 py-2 rounded-xl text-xs font-extrabold transition border ${
-        active
-          ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-          : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-      }`}
-    >
+        active ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+      }`}>
       {label}
     </button>
   );
 }
 
-/* =======================
-   Feedback Modal
-======================= */
+/* ── Feedback Modal ──────────────────────────────────────────────────────── */
 function FeedbackModal({ employee, onClose }) {
   const getRatingStars = (rating) => {
     const num = Number(rating) || 0;
     return Array.from({ length: 5 }, (_, i) => (
-      <FiStar
-        key={i}
-        className={i < num ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}
-        size={16}
-      />
+      <FiStar key={i} className={i < num ? "fill-yellow-400 text-yellow-400" : "text-gray-300"} size={16} />
     ));
   };
 
   const getPerformanceBadge = (rating) => {
     const num = Number(rating) || 0;
     if (num >= 4.5) return { text: "Excellent", cls: "bg-emerald-600" };
-    if (num >= 4) return { text: "Very Good", cls: "bg-green-600" };
-    if (num >= 3) return { text: "Good", cls: "bg-amber-600" };
-    if (num >= 2) return { text: "Fair", cls: "bg-orange-600" };
+    if (num >= 4)   return { text: "Very Good", cls: "bg-green-600" };
+    if (num >= 3)   return { text: "Good", cls: "bg-amber-600" };
+    if (num >= 2)   return { text: "Fair", cls: "bg-orange-600" };
     return { text: "Needs Improvement", cls: "bg-rose-600" };
   };
 
@@ -853,7 +840,6 @@ function FeedbackModal({ employee, onClose }) {
   const badge = getPerformanceBadge(avgRating);
   const feedbacks = employee.feedbacks || [];
 
-  // Sort newest first
   const sorted = [...feedbacks].sort((a, b) => {
     const ta = a.timestamp?.seconds ?? a.timestamp ?? 0;
     const tb = b.timestamp?.seconds ?? b.timestamp ?? 0;
@@ -862,38 +848,24 @@ function FeedbackModal({ employee, onClose }) {
 
   const formatDate = (ts) => {
     if (!ts) return "";
-    // Firestore Timestamp object
     const ms = ts?.seconds ? ts.seconds * 1000 : Number(ts);
     const d = new Date(ms);
     if (isNaN(d.getTime())) return "";
-    return d.toLocaleString(undefined, {
-      year: "numeric", month: "short", day: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
+    return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
-  const fullName = [employee.firstName, employee.middleName, employee.lastName]
-    .filter(Boolean)
-    .join(" ");
+  const fullName = [employee.firstName, employee.middleName, employee.lastName].filter(Boolean).join(" ");
 
   return (
-    <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl relative max-h-[90vh] overflow-hidden border border-white/60"
-        onClick={(ev) => ev.stopPropagation()}
-      >
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl relative max-h-[90vh] overflow-hidden border border-white/60"
+        onClick={(ev) => ev.stopPropagation()}>
         {/* Modal Header */}
         <div className="relative overflow-hidden bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 p-6 md:p-7">
           <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
           <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
 
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 text-white/90 hover:text-white rounded-full p-2 hover:bg-white/10 transition"
-          >
+          <button onClick={onClose} className="absolute top-4 right-4 text-white/90 hover:text-white rounded-full p-2 hover:bg-white/10 transition">
             <FiXCircle size={26} />
           </button>
 
@@ -901,11 +873,7 @@ function FeedbackModal({ employee, onClose }) {
             <div className="flex items-start gap-4">
               <div className="relative bg-white/15 backdrop-blur-sm rounded-2xl border border-white/20 w-24 h-24 flex items-center justify-center overflow-hidden shrink-0">
                 {employee.avatar ? (
-                  <img 
-                    src={employee.avatar} 
-                    alt={fullName} 
-                    className="w-full h-full rounded-xl object-cover"
-                  />
+                  <img src={employee.avatar} alt={fullName} className="w-full h-full rounded-xl object-cover" />
                 ) : (
                   <FiUser className="text-white" size={38} />
                 )}
@@ -917,36 +885,26 @@ function FeedbackModal({ employee, onClose }) {
 
                 <div className="mt-4 inline-flex items-center gap-3 bg-white/15 border border-white/20 rounded-2xl px-4 py-3">
                   <div>
-                    <p className="text-white/80 text-[11px] font-extrabold uppercase tracking-wider">
-                      Average Rating
-                    </p>
+                    <p className="text-white/80 text-[11px] font-extrabold uppercase tracking-wider">Average Rating</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-3xl font-extrabold text-white">
-                        {avgRating > 0 ? avgRating.toFixed(1) : "N/A"}
-                      </span>
+                      <span className="text-3xl font-extrabold text-white">{avgRating > 0 ? avgRating.toFixed(1) : "N/A"}</span>
                       <div className="flex gap-0.5">{getRatingStars(avgRating)}</div>
                     </div>
                   </div>
                   <div className="h-10 w-px bg-white/25" />
                   <div>
-                    <p className="text-white/80 text-[11px] font-extrabold uppercase tracking-wider">
-                      Total Reviews
-                    </p>
+                    <p className="text-white/80 text-[11px] font-extrabold uppercase tracking-wider">Total Reviews</p>
                     <p className="text-2xl font-extrabold text-white mt-1">{feedbacks.length}</p>
                   </div>
                 </div>
 
                 {avgRating > 0 && (
                   <div className="mt-3">
-                    <span className={`${badge.cls} text-white text-xs font-extrabold px-3 py-1.5 rounded-full`}>
-                      {badge.text}
-                    </span>
+                    <span className={`${badge.cls} text-white text-xs font-extrabold px-3 py-1.5 rounded-full`}>{badge.text}</span>
                   </div>
                 )}
               </div>
             </div>
-
-            
           </div>
         </div>
 
@@ -956,67 +914,46 @@ function FeedbackModal({ employee, onClose }) {
             <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
               <FiMessageCircle className="text-indigo-600" /> Reviews
             </h3>
-            {sorted.length > 0 && (
-              <span className="text-xs font-semibold text-gray-500">Sorted: newest first</span>
-            )}
+            {sorted.length > 0 && <span className="text-xs font-semibold text-gray-500">Sorted: newest first</span>}
           </div>
 
           <div className="space-y-4">
-            {sorted.length > 0 ? (
-              sorted.map((f) => (
-                <div
-                  key={f.id}
-                  className="bg-white rounded-2xl p-5 shadow-md border border-gray-200 hover:shadow-xl transition"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="bg-indigo-100 rounded-2xl p-3 shrink-0">
-                        <FiUser className="text-indigo-600" size={18} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-extrabold text-gray-900 text-sm truncate">
-                          {f.citizen || "Anonymous Citizen"}
-                        </p>
-                        <p className="text-xs text-gray-500 font-semibold mt-1">
-                          {formatDate(f.timestamp)}
-                        </p>
-                      </div>
+            {sorted.length > 0 ? sorted.map((f) => (
+              <div key={f.id} className="bg-white rounded-2xl p-5 shadow-md border border-gray-200 hover:shadow-xl transition">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="bg-indigo-100 rounded-2xl p-3 shrink-0">
+                      <FiUser className="text-indigo-600" size={18} />
                     </div>
-
-                    <div className="shrink-0">
-                      <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-100 px-3 py-2 rounded-2xl">
-                        <div className="flex gap-0.5">{getRatingStars(f.rating)}</div>
-                        <span className="text-xs font-extrabold text-gray-800">
-                          {Number(f.rating || 0).toFixed(1)}
-                        </span>
-                      </div>
+                    <div className="min-w-0">
+                      <p className="font-extrabold text-gray-900 text-sm truncate">{f.citizen || "Anonymous Citizen"}</p>
+                      <p className="text-xs text-gray-500 font-semibold mt-1">{formatDate(f.timestamp)}</p>
                     </div>
                   </div>
-
-                  <div className="mt-4 bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                    <p className="text-sm text-gray-700 leading-relaxed">
-                      {f.comment || "No comment provided."}
-                    </p>
+                  <div className="shrink-0">
+                    <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-100 px-3 py-2 rounded-2xl">
+                      <div className="flex gap-0.5">{getRatingStars(f.rating)}</div>
+                      <span className="text-xs font-extrabold text-gray-800">{Number(f.rating || 0).toFixed(1)}</span>
+                    </div>
                   </div>
                 </div>
-              ))
-            ) : (
+                <div className="mt-4 bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                  <p className="text-sm text-gray-700 leading-relaxed">{f.comment || "No comment provided."}</p>
+                </div>
+              </div>
+            )) : (
               <div className="text-center py-14">
                 <div className="bg-slate-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
                   <FiMessageCircle className="text-slate-400" size={40} />
                 </div>
                 <p className="text-gray-600 font-extrabold">No feedback yet</p>
-                <p className="text-gray-500 text-sm font-semibold mt-1">
-                  This employee hasn't received any citizen reviews.
-                </p>
+                <p className="text-gray-500 text-sm font-semibold mt-1">This employee hasn't received any citizen reviews.</p>
               </div>
             )}
           </div>
 
           {sorted.length > 0 && (
-            <div className="mt-6 text-xs text-gray-500 font-semibold">
-              Tip: Click outside the modal to close.
-            </div>
+            <div className="mt-6 text-xs text-gray-500 font-semibold">Tip: Click outside the modal to close.</div>
           )}
         </div>
       </div>

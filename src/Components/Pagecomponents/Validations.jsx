@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   FiUser, FiPhone, FiMapPin, FiHome,
   FiX, FiSearch, FiCheck, FiSlash, FiTrash2, FiShield, FiSun, FiMoon,
+  FiChevronLeft, FiChevronRight,
 } from "react-icons/fi";
 import {
   getFirestore,
@@ -11,12 +12,13 @@ import {
   doc,
   updateDoc,
   deleteDoc,
-  query,
-  where,
 } from "firebase/firestore";
 import app from "../../firebaseConfig";
 
 const firestore = getFirestore(app);
+
+const RESIDENT_PAGE_SIZE = 10;
+const TANOD_PAGE_SIZE = 5;
 
 const normalizeStatus = (s) => {
   const v = (s || "pending").toLowerCase();
@@ -39,6 +41,75 @@ const statusLabel = (status) => {
   return "Pending";
 };
 
+// ── Pagination Component ────────────────────────────────────────────────────
+const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSize, accent = "indigo" }) => {
+  if (totalPages <= 1) return null;
+
+  const from = (currentPage - 1) * pageSize + 1;
+  const to = Math.min(currentPage * pageSize, totalItems);
+
+  const pages = [];
+  const delta = 1;
+  const left = currentPage - delta;
+  const right = currentPage + delta;
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= left && i <= right)) {
+      pages.push(i);
+    } else if (i === left - 1 || i === right + 1) {
+      pages.push("...");
+    }
+  }
+
+  // Deduplicate consecutive ellipses
+  const dedupedPages = pages.filter((p, idx) => !(p === "..." && pages[idx - 1] === "..."));
+
+  const btnBase = `inline-flex items-center justify-center w-8 h-8 rounded-lg text-xs font-extrabold border transition`;
+  const activeBtn = accent === "indigo"
+    ? "bg-indigo-600 text-white border-indigo-600 shadow"
+    : "bg-indigo-500 text-white border-indigo-500 shadow";
+  const inactiveBtn = "bg-white text-gray-700 border-gray-200 hover:bg-gray-50";
+  const disabledBtn = "bg-white text-gray-300 border-gray-100 cursor-not-allowed";
+
+  return (
+    <div className="flex items-center justify-between px-6 py-3 border-t border-gray-100 bg-white/60">
+      <p className="text-xs font-semibold text-gray-500">
+        Showing <span className="font-extrabold text-gray-700">{from}–{to}</span> of{" "}
+        <span className="font-extrabold text-gray-700">{totalItems}</span>
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className={`${btnBase} ${currentPage === 1 ? disabledBtn : inactiveBtn}`}
+        >
+          <FiChevronLeft size={14} />
+        </button>
+        {dedupedPages.map((p, idx) =>
+          p === "..." ? (
+            <span key={`ellipsis-${idx}`} className="w-8 text-center text-xs text-gray-400 font-bold">…</span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onPageChange(p)}
+              className={`${btnBase} ${currentPage === p ? activeBtn : inactiveBtn}`}
+            >
+              {p}
+            </button>
+          )
+        )}
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className={`${btnBase} ${currentPage === totalPages ? disabledBtn : inactiveBtn}`}
+        >
+          <FiChevronRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const Validations = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
@@ -50,11 +121,19 @@ const Validations = () => {
   const [loading, setLoading] = useState(true);
   const [tanodLoading, setTanodLoading] = useState(true);
 
+  // Pagination state
+  const [residentPage, setResidentPage] = useState(1);
+  const [tanodPage, setTanodPage] = useState(1);
+
   // Tanod-specific state
   const [tanodSearch, setTanodSearch] = useState("");
   const [tanodPurokFilter, setTanodPurokFilter] = useState("All Purok");
 
-  // ── Firestore listener (Residents from users collection) ───────────────────
+  // Reset page when filters change
+  useEffect(() => { setResidentPage(1); }, [searchTerm, filter, purokFilter]);
+  useEffect(() => { setTanodPage(1); }, [tanodSearch, tanodPurokFilter]);
+
+  // ── Firestore listener (Residents) ─────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(firestore, "users"),
@@ -90,17 +169,14 @@ const Validations = () => {
     return () => unsubscribe();
   }, []);
 
-  // ── Firestore listener (Tanods/Employees from employee collection) ───────────
+  // ── Firestore listener (Tanods/Employees) ──────────────────────────────────
   useEffect(() => {
     const empCol = collection(firestore, "employee");
-    // Fetch employees where idstatus is null or "pending"
     const unsubscribe = onSnapshot(empCol, (snapshot) => {
       const tanodArray = [];
       snapshot.forEach((docSnap) => {
         const tanod = docSnap.data();
         const idStatus = (tanod.idstatus || "").toLowerCase();
-        
-        // Only include if idstatus is null, "pending", or undefined
         if (idStatus === "" || idStatus === "pending" || !tanod.idstatus) {
           tanodArray.push({
             id: docSnap.id,
@@ -131,10 +207,9 @@ const Validations = () => {
     return () => unsubscribe();
   }, []);
 
-  // ── Separate residents (no longer need to filter tanods from users) ────────
   const residents = useMemo(() => users, [users]);
 
-  // ── Purok options ────────────────────────────────────────────────────────────
+  // ── Purok options ─────────────────────────────────────────────────────────
   const purokOptions = useMemo(() => {
     const base = ["All Purok", "Purok 1", "Purok 2", "Purok 3", "Purok 4", "Purok 5"];
     const unique = new Set();
@@ -177,7 +252,7 @@ const Validations = () => {
     return [...base, ...extras];
   }, [tanods]);
 
-  // ── Stats (residents only) ───────────────────────────────────────────────────
+  // ── Stats ─────────────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
     total:    residents.length,
     pending:  residents.filter((u) => u.idstatus === "pending").length,
@@ -185,7 +260,6 @@ const Validations = () => {
     declined: residents.filter((u) => u.idstatus === "declined").length,
   }), [residents]);
 
-  // ── Tanod stats ──────────────────────────────────────────────────────────────
   const tanodStats = useMemo(() => ({
     total:    tanods.length,
     pending:  tanods.filter((u) => u.idstatus === "pending").length,
@@ -193,7 +267,7 @@ const Validations = () => {
     declined: tanods.filter((u) => u.idstatus === "declined").length,
   }), [tanods]);
 
-  // ── Filtered residents ───────────────────────────────────────────────────────
+  // ── Filtered residents ────────────────────────────────────────────────────
   const filteredUsers = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return residents.filter((user) => {
@@ -211,7 +285,14 @@ const Validations = () => {
     });
   }, [residents, filter, searchTerm, purokFilter]);
 
-  // ── Filtered tanods ──────────────────────────────────────────────────────────
+  // ── Paginated residents ───────────────────────────────────────────────────
+  const residentTotalPages = Math.max(1, Math.ceil(filteredUsers.length / RESIDENT_PAGE_SIZE));
+  const paginatedResidents = useMemo(() => {
+    const start = (residentPage - 1) * RESIDENT_PAGE_SIZE;
+    return filteredUsers.slice(start, start + RESIDENT_PAGE_SIZE);
+  }, [filteredUsers, residentPage]);
+
+  // ── Filtered tanods ───────────────────────────────────────────────────────
   const filteredTanods = useMemo(() => {
     const term = tanodSearch.toLowerCase();
     return tanods.filter((user) => {
@@ -230,7 +311,14 @@ const Validations = () => {
     });
   }, [tanods, tanodSearch, tanodPurokFilter]);
 
-  // ── Shift helpers ────────────────────────────────────────────────────────────
+  // ── Paginated tanods ──────────────────────────────────────────────────────
+  const tanodTotalPages = Math.max(1, Math.ceil(filteredTanods.length / TANOD_PAGE_SIZE));
+  const paginatedTanods = useMemo(() => {
+    const start = (tanodPage - 1) * TANOD_PAGE_SIZE;
+    return filteredTanods.slice(start, start + TANOD_PAGE_SIZE);
+  }, [filteredTanods, tanodPage]);
+
+  // ── Shift helpers ─────────────────────────────────────────────────────────
   const shiftChip = (shift) => {
     if (!shift || shift === "none") return "bg-gray-100 text-gray-500 border-gray-200";
     if (shift === "morning") return "bg-amber-100 text-amber-800 border-amber-200";
@@ -250,13 +338,12 @@ const Validations = () => {
     return null;
   };
 
-  // ── Update / Delete ──────────────────────────────────────────────────────────
+  // ── Update / Delete ───────────────────────────────────────────────────────
   const updateStatus = async (id, newStatus) => {
     try {
-      // Check if updating a resident (users collection) or tanod (employee collection)
       const isResident = residents.some(u => u.id === id);
       const isTanod = tanods.some(t => t.id === id);
-      
+
       if (isResident) {
         await updateDoc(doc(firestore, "users", id), { idstatus: newStatus });
         const normalized = normalizeStatus(newStatus);
@@ -279,10 +366,9 @@ const Validations = () => {
   const deleteUser = async (id) => {
     if (!window.confirm("Delete this user permanently? This cannot be undone.")) return;
     try {
-      // Check if deleting a resident (users collection) or tanod (employee collection)
       const isResident = residents.some(u => u.id === id);
       const isTanod = tanods.some(t => t.id === id);
-      
+
       if (isResident) {
         await deleteDoc(doc(firestore, "users", id));
         setUsers((prev) => prev.filter((u) => u.id !== id));
@@ -290,7 +376,7 @@ const Validations = () => {
         await deleteDoc(doc(firestore, "employee", id));
         setTanods((prev) => prev.filter((t) => t.id !== id));
       }
-      
+
       if (selectedUser?.id === id) setSelectedUser(null);
     } catch (err) {
       console.error("Error deleting user:", err);
@@ -300,10 +386,9 @@ const Validations = () => {
 
   const updateShift = async (id, newShift) => {
     try {
-      // Check if updating a resident (users collection) or tanod (employee collection)
       const isResident = residents.some(u => u.id === id);
       const isTanod = tanods.some(t => t.id === id);
-      
+
       if (isResident) {
         await updateDoc(doc(firestore, "users", id), { shift: newShift });
         setUsers((prev) => prev.map((u) => u.id === id ? { ...u, shift: newShift } : u));
@@ -321,7 +406,7 @@ const Validations = () => {
     }
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       <div
@@ -339,9 +424,9 @@ const Validations = () => {
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-8 space-y-10">
 
-        {/* ════════════════════════════════════════════════════════════════════
+        {/* ══════════════════════════════════════════════════════════════════
             SECTION 1: RESIDENTS
-        ════════════════════════════════════════════════════════════════════ */}
+        ══════════════════════════════════════════════════════════════════ */}
 
         {/* Section Label */}
         <div className="flex items-center gap-3">
@@ -431,64 +516,76 @@ const Validations = () => {
               <span className="text-gray-500 font-semibold">Loading users...</span>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] text-left">
-                <thead className="bg-white sticky top-0 z-10">
-                  <tr className="border-b border-gray-200">
-                    {["Name", "Contact", "Purok", "Address", "ID Verification", "Status", "Actions"].map((h) => (
-                      <th key={h} className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-gray-600 ${h === "Actions" ? "text-right" : ""}`}>
-                        {h}
-                      </th>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1040px] text-left">
+                  <thead className="bg-white sticky top-0 z-10">
+                    <tr className="border-b border-gray-200">
+                      {["Name", "Contact", "Purok", "Address", "ID Verification", "Status", "Actions"].map((h) => (
+                        <th key={h} className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-gray-600 ${h === "Actions" ? "text-right" : ""}`}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedResidents.map((user, idx) => (
+                      <tr key={user.id}
+                        className={`border-b border-gray-100 transition ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-indigo-50/50 cursor-pointer`}
+                        onClick={() => setSelectedUser(user)}>
+                        <td className="px-6 py-4 font-bold text-gray-900">{user.complainant || "—"}</td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-800">{user.number || "—"}</td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-800">Purok {user.purok || "—"}</td>
+                        <td className="px-6 py-4 max-w-sm truncate text-sm text-gray-700" title={user.address || ""}>{user.address || "—"}</td>
+                        <td className="px-6 py-4">
+                          {user.idImage ? (
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-emerald-50 text-emerald-700 border-emerald-200">
+                              <FiCheck /> Sent
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-slate-100 text-slate-700 border-slate-200">
+                              <FiSlash /> None
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border ${statusChip(user.idstatus)}`}>
+                            {statusLabel(user.idstatus)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={() => deleteUser(user.id)}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-extrabold border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition">
+                            <FiTrash2 /> Delete
+                          </button>
+                        </td>
+                      </tr>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((user, idx) => (
-                    <tr key={user.id}
-                      className={`border-b border-gray-100 transition ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-indigo-50/50 cursor-pointer`}
-                      onClick={() => setSelectedUser(user)}>
-                      <td className="px-6 py-4 font-bold text-gray-900">{user.complainant || "—"}</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-800">{user.number || "—"}</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-800">Purok {user.purok || "—"}</td>
-                      <td className="px-6 py-4 max-w-sm truncate text-sm text-gray-700" title={user.address || ""}>{user.address || "—"}</td>
-                      <td className="px-6 py-4">
-                        {user.idImage ? (
-                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-emerald-50 text-emerald-700 border-emerald-200">
-                            <FiCheck /> Sent
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-slate-100 text-slate-700 border-slate-200">
-                            <FiSlash /> None
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border ${statusChip(user.idstatus)}`}>
-                          {statusLabel(user.idstatus)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => deleteUser(user.id)}
-                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-extrabold border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition">
-                          <FiTrash2 /> Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredUsers.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="text-center py-10 text-gray-500 font-semibold">No registrations found</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    {filteredUsers.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="text-center py-10 text-gray-500 font-semibold">No registrations found</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Resident Pagination */}
+              <Pagination
+                currentPage={residentPage}
+                totalPages={residentTotalPages}
+                onPageChange={setResidentPage}
+                totalItems={filteredUsers.length}
+                pageSize={RESIDENT_PAGE_SIZE}
+                accent="indigo"
+              />
+            </>
           )}
         </div>
 
-        {/* ════════════════════════════════════════════════════════════════════
+        {/* ══════════════════════════════════════════════════════════════════
             SECTION 2: TANOD / EMPLOYEES
-        ════════════════════════════════════════════════════════════════════ */}
+        ══════════════════════════════════════════════════════════════════ */}
 
         {/* Divider */}
         <div className="border-t-2 border-dashed border-indigo-200 pt-4" />
@@ -554,93 +651,105 @@ const Validations = () => {
               <span className="text-gray-500 font-semibold">Loading tanods...</span>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-left">
-                <thead className="bg-indigo-50 sticky top-0 z-10">
-                  <tr className="border-b border-indigo-100">
-                    {["Name", "Contact", "Purok", "Address", "Position", "Shift", "ID Status", "Verification", "Actions"].map((h) => (
-                      <th key={h} className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-indigo-700 ${h === "Actions" ? "text-right" : ""}`}>
-                        {h}
-                      </th>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1100px] text-left">
+                  <thead className="bg-indigo-50 sticky top-0 z-10">
+                    <tr className="border-b border-indigo-100">
+                      {["Name", "Contact", "Purok", "Address", "Position", "Shift", "ID Status", "Verification", "Actions"].map((h) => (
+                        <th key={h} className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-indigo-700 ${h === "Actions" ? "text-right" : ""}`}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedTanods.map((user, idx) => (
+                      <tr
+                        key={user.id}
+                        className={`border-b border-indigo-50 transition ${idx % 2 === 0 ? "bg-white" : "bg-indigo-50/30"} hover:bg-indigo-50/70 cursor-pointer`}
+                        onClick={() => setSelectedUser(user)}
+                      >
+                        <td className="px-6 py-4 font-bold text-gray-900">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-100 text-indigo-600">
+                              <FiShield size={13} />
+                            </span>
+                            {user.complainant || "—"}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-800">{user.number || "—"}</td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-800">Purok {user.purok || "—"}</td>
+                        <td className="px-6 py-4 max-w-xs truncate text-sm text-gray-700" title={user.address || ""}>{user.address || "—"}</td>
+                        <td className="px-6 py-4">
+                          {user.position ? (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border bg-indigo-100 text-indigo-700 border-indigo-200 capitalize">
+                              {user.position}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={user.shift || "none"}
+                            onChange={(e) => updateShift(user.id, e.target.value)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 transition ${shiftChip(user.shift)}`}
+                          >
+                            <option value="none">No Shift</option>
+                            <option value="morning">☀️ Morning</option>
+                            <option value="evening">🌙 Evening</option>
+                          </select>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border ${statusChip(user.idstatus)}`}>
+                            {statusLabel(user.idstatus)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          {user.idImage ? (
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-emerald-50 text-emerald-700 border-emerald-200">
+                              <FiCheck /> Sent
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-slate-100 text-slate-700 border-slate-200">
+                              <FiSlash /> None
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => deleteUser(user.id)}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-extrabold border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition"
+                          >
+                            <FiTrash2 /> Delete
+                          </button>
+                        </td>
+                      </tr>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTanods.map((user, idx) => (
-                    <tr
-                      key={user.id}
-                      className={`border-b border-indigo-50 transition ${idx % 2 === 0 ? "bg-white" : "bg-indigo-50/30"} hover:bg-indigo-50/70 cursor-pointer`}
-                      onClick={() => setSelectedUser(user)}
-                    >
-                      <td className="px-6 py-4 font-bold text-gray-900">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-100 text-indigo-600">
-                            <FiShield size={13} />
-                          </span>
-                          {user.complainant || "—"}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-800">{user.number || "—"}</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-800">Purok {user.purok || "—"}</td>
-                      <td className="px-6 py-4 max-w-xs truncate text-sm text-gray-700" title={user.address || ""}>{user.address || "—"}</td>
-                      <td className="px-6 py-4">
-                        {user.position ? (
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border bg-indigo-100 text-indigo-700 border-indigo-200 capitalize">
-                            {user.position}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                        <select
-                          value={user.shift || "none"}
-                          onChange={(e) => updateShift(user.id, e.target.value)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 transition ${shiftChip(user.shift)}`}
-                        >
-                          <option value="none">No Shift</option>
-                          <option value="morning">☀️ Morning</option>
-                          <option value="evening">🌙 Evening</option>
-                        </select>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border ${statusChip(user.idstatus)}`}>
-                          {statusLabel(user.idstatus)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        {user.idImage ? (
-                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-emerald-50 text-emerald-700 border-emerald-200">
-                            <FiCheck /> Sent
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-slate-100 text-slate-700 border-slate-200">
-                            <FiSlash /> None
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => deleteUser(user.id)}
-                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-extrabold border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition"
-                        >
-                          <FiTrash2 /> Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredTanods.length === 0 && (
-                    <tr>
-                      <td colSpan={9} className="text-center py-10 text-gray-500 font-semibold">No tanods found</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    {filteredTanods.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="text-center py-10 text-gray-500 font-semibold">No tanods found</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Tanod Pagination */}
+              <Pagination
+                currentPage={tanodPage}
+                totalPages={tanodTotalPages}
+                onPageChange={setTanodPage}
+                totalItems={filteredTanods.length}
+                pageSize={TANOD_PAGE_SIZE}
+                accent="indigo"
+              />
+            </>
           )}
         </div>
 
-        {/* ── Detail Modal (shared for residents & tanods) ──────────────────── */}
+        {/* ── Detail Modal (shared for residents & tanods) ─────────────────── */}
         {selectedUser && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/35 backdrop-blur-sm z-50 p-4"
             onClick={() => setSelectedUser(null)}>
@@ -654,13 +763,12 @@ const Validations = () => {
                   onClick={() => setSelectedUser(null)}><FiX size={22} /></button>
                 <div className="relative">
                   <div className="flex items-start gap-4">
-                    {/* Avatar Display for Tanods */}
                     {selectedUser.isEmployee && (
                       <div className="relative bg-white/15 backdrop-blur-sm rounded-2xl border border-white/20 w-20 h-20 flex items-center justify-center overflow-hidden shrink-0">
                         {selectedUser.avatar ? (
-                          <img 
-                            src={selectedUser.avatar} 
-                            alt={selectedUser.complainant} 
+                          <img
+                            src={selectedUser.avatar}
+                            alt={selectedUser.complainant}
                             className="w-full h-full rounded-xl object-cover"
                           />
                         ) : (
