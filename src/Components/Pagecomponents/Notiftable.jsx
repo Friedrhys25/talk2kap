@@ -4,6 +4,8 @@
 //             sets deployedTanods array + deployedTanodUid/Name on complaint
 // On resolve: clears all tanods' deployment, updates complaint status to "resolved"
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import sirenAudio from "../../assets/The Purge Siren - Sound Effect for editing.mp3";
+import barangayLogo from "../../assets/sanroquelogo.png";
 import {
   FiAlertTriangle, FiClock, FiSearch, FiX,
   FiUser, FiMapPin, FiFileText, FiCalendar,
@@ -567,11 +569,10 @@ const Notiftable = () => {
   return (
     <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       {/* Audio alert */}
-      <audio ref={audioRef} src="/src/assets/The Purge Siren - Sound Effect for editing.mp3" />
-      <div
+        <audio ref={audioRef} src={sirenAudio} />      <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
-          backgroundImage: 'url("/src/assets/sanroquelogo.png")',
+          backgroundImage: `url(${barangayLogo})`,
           backgroundPosition: "right 35% center",
           backgroundRepeat: "no-repeat",
           backgroundSize: "49%",
