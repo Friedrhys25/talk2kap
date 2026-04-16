@@ -168,7 +168,6 @@ const LoginView = ({ onForgot }) => {
           <input
             type="email"
             className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-400 focus:outline-none transition-colors"
-            placeholder="admin@sanroque.gov.ph"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleLogin(e)}
@@ -196,7 +195,6 @@ const LoginView = ({ onForgot }) => {
           <input
             type={showPassword ? "text" : "password"}
             className="w-full pl-10 pr-12 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-400 focus:outline-none transition-colors"
-            placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleLogin(e)}

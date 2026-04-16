@@ -5,17 +5,17 @@ import OfficialTable from "../../Components/Pagecomponents/Officialtable";
 
 const Officialpage = () => {
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 w-full">
+    <div className="flex flex-col h-full overflow-hidden bg-linear-to-br from-gray-50 via-blue-50 to-indigo-50 w-full">
       <div className="p-6 flex-1 overflow-y-auto">
         {/* Improved Barangay Officials Header */}
         <div className="text-center mb-12 space-y-3">
           <div className="flex items-center justify-center gap-4 mb-2">
-            <div className="h-1 w-16 bg-gradient-to-r from-transparent to-indigo-500 rounded-full"></div>
+            <div className="h-1 w-16 bg-linear-to-r from-transparent to-indigo-500 rounded-full"></div>
             <FiUsers className="text-indigo-600 text-4xl animate-pulse" />
-            <div className="h-1 w-16 bg-gradient-to-l from-transparent to-indigo-500 rounded-full"></div>
+            <div className="h-1 w-16 bg-linear-to-l from-transparent to-indigo-500 rounded-full"></div>
           </div>
           
-          <h1 className="text-6xl font-extrabold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+          <h1 className="text-6xl font-extrabold bg-linear-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
             Barangay Officials
           </h1>
           

@@ -5,17 +5,17 @@ import NotifTable from '../../Components/Pagecomponents/Notiftable';
 
 const Complaints = () => {
   return (
-    <div className="flex flex-col w-full h-screen overflow-hidden bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+    <div className="flex flex-col w-full h-screen overflow-hidden bg-linear-to-br from-gray-50 via-blue-50 to-indigo-50">
       <div className="p-6 flex-1 overflow-y-auto">
         {/* Improved Complaints Header */}
         <div className="text-center mb-12 space-y-3">
           <div className="flex items-center justify-center gap-4 mb-2">
-            <div className="h-1 w-16 bg-gradient-to-r from-transparent to-indigo-500 rounded-full"></div>
+            <div className="h-1 w-16 bg-linear-to-r from-transparent to-indigo-500 rounded-full"></div>
             <FiAlertCircle className="text-indigo-600 text-4xl animate-pulse" />
-            <div className="h-1 w-16 bg-gradient-to-l from-transparent to-indigo-500 rounded-full"></div>
+            <div className="h-1 w-16 bg-linear-to-l from-transparent to-indigo-500 rounded-full"></div>
           </div>
           
-          <h1 className="text-6xl font-extrabold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+          <h1 className="text-6xl font-extrabold bg-linear-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
             Complaints
           </h1>
           
