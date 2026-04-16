@@ -1,5 +1,7 @@
 // MessageTable.jsx - Updated to use Firestore
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import barangayLogo from "../../assets/sanroquelogo.png";
+
 import {
   FiMail, FiX, FiSearch, FiSend, FiMapPin,
   FiFileText, FiMessageSquare, FiBell, FiCheck,
@@ -322,7 +324,7 @@ const MessageTable = () => {
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
-          backgroundImage: 'url("/src/assets/sanroquelogo.png")',
+          backgroundImage: `url(${barangayLogo})`,
           backgroundPosition: "right 35% center",
           backgroundRepeat: "no-repeat",
           backgroundSize: "49%",

@@ -5,6 +5,8 @@
 // ✅ Shows loading/empty states gracefully
 
 import React, { useMemo, useEffect, useState } from "react";
+import barangayLogo from "../../assets/sanroquelogo.png";
+
 import {
   BarChart,
   Bar,
@@ -116,7 +118,7 @@ const PurokChart = () => {
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
-          backgroundImage: 'url("/src/assets/sanroquelogo.png")',
+          backgroundImage: `url(${barangayLogo})`,
           backgroundPosition: "right 35% center",
           backgroundRepeat: "no-repeat",
           backgroundSize: "49%",

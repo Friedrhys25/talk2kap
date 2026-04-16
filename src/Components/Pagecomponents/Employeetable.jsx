@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import barangayLogo from "../../assets/sanroquelogo.png";
+
 import {
   FiUser,
   FiStar,
@@ -371,7 +373,7 @@ export default function EmployeeTable() {
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
-          backgroundImage: 'url("/src/assets/sanroquelogo.png")',
+          backgroundImage: `url(${barangayLogo})`,
           backgroundPosition: "right 35% center",
           backgroundRepeat: "no-repeat",
           backgroundSize: "49%",

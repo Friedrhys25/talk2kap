@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import barangayLogo from "../../assets/sanroquelogo.png";
+
 import {
   FiUser,
   FiXCircle,
@@ -188,7 +190,7 @@ export default function OfficialTable() {
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
-          backgroundImage: 'url("/src/assets/sanroquelogo.png")',
+          backgroundImage: `url(${barangayLogo})`,
           backgroundPosition: "right 35% center",
           backgroundRepeat: "no-repeat",
           backgroundSize: "49%",
@@ -538,7 +540,7 @@ function OfficialDetailModal({ official, onClose }) {
           {/* Email */}
           {official.email && (
             <div className="flex items-start gap-4">
-              <div className="flex-shrink-0">
+              <div className="shrink-0">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100">
                   <FiMail className="text-indigo-600" size={20} />
                 </div>
@@ -558,7 +560,7 @@ function OfficialDetailModal({ official, onClose }) {
           {/* Contact Number */}
           {official.contactNumber && (
             <div className="flex items-start gap-4">
-              <div className="flex-shrink-0">
+              <div className="shrink-0">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-100">
                   <FiPhone className="text-green-600" size={20} />
                 </div>
@@ -577,7 +579,7 @@ function OfficialDetailModal({ official, onClose }) {
 
           {/* Position */}
           <div className="flex items-start gap-4">
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-100">
                 <FiUser className="text-purple-600" size={20} />
               </div>

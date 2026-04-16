@@ -1,6 +1,8 @@
 // src/Components/Pagecomponents/Emergency.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { FaFire } from "react-icons/fa";
+import barangayLogo from "../../assets/sanroquelogo.png";
+
 import {
   FiPhone,
   FiPlus,
@@ -191,7 +193,7 @@ const Emergency = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2.5">
-            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-rose-700 grid place-items-center shadow-lg shadow-rose-200">
+            <span className="w-10 h-10 rounded-xl bg-linear-to-br from-rose-500 to-rose-700 grid place-items-center shadow-lg shadow-rose-200">
               <FiPhone size={18} className="text-white" />
             </span>
             Emergency Hotlines
@@ -204,12 +206,15 @@ const Emergency = () => {
         <motion.button
           whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
           onClick={openAdd}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-sm font-extrabold shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-indigo-600 to-indigo-700 text-white text-sm font-extrabold shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all"
         >
           <FiPlus size={17} />
           Add Hotline
         </motion.button>
       </div>
+
+
+
 
       {/* ── Stat Cards ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-4">
@@ -388,7 +393,7 @@ const Emergency = () => {
               className="relative w-full max-w-md rounded-2xl border border-white/60 bg-white shadow-2xl overflow-hidden"
             >
               {/* Modal header */}
-              <div className="relative p-6 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white">
+              <div className="relative p-6 bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white">
                 <button
                   onClick={() => !saving && setModalOpen(false)}
                   className="absolute top-4 right-4 text-white/70 hover:text-white hover:bg-white/10 rounded-full p-1.5 transition"
@@ -481,7 +486,7 @@ const Emergency = () => {
                     whileTap={{ scale: 0.97 }}
                     onClick={handleSave}
                     disabled={saving || !form.name.trim() || !form.number.trim()}
-                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-extrabold transition text-sm shadow-md shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-1 py-2.5 rounded-xl bg-linear-to-r from-indigo-600 to-indigo-700 text-white font-extrabold transition text-sm shadow-md shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {saving ? <FiLoader size={15} className="animate-spin" /> : <FiCheck size={15} />}
                     {saving ? "Saving…" : editTarget ? "Save Changes" : "Add Hotline"}
@@ -508,7 +513,7 @@ const Emergency = () => {
               variants={modalVariants} initial="hidden" animate="visible" exit="exit"
               className="relative w-full max-w-sm rounded-2xl border border-white/60 bg-white shadow-2xl overflow-hidden"
             >
-              <div className="p-6 bg-gradient-to-r from-rose-600 to-rose-700 text-white">
+              <div className="p-6 bg-linear-to-r from-rose-600 to-rose-700 text-white">
                 <button
                   onClick={() => !deleting && setDeleteTarget(null)}
                   className="absolute top-4 right-4 text-white/70 hover:text-white hover:bg-white/10 rounded-full p-1.5 transition"
@@ -544,7 +549,7 @@ const Emergency = () => {
                     whileTap={{ scale: 0.97 }}
                     onClick={handleDelete}
                     disabled={deleting}
-                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 text-white font-extrabold transition text-sm shadow-md shadow-rose-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-1 py-2.5 rounded-xl bg-linear-to-r from-rose-600 to-rose-700 text-white font-extrabold transition text-sm shadow-md shadow-rose-200 disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {deleting ? <FiLoader size={15} className="animate-spin" /> : <FiTrash2 size={15} />}
                     {deleting ? "Deleting…" : "Yes, Delete"}

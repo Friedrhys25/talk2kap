@@ -1,5 +1,7 @@
 // Validations.jsx - verified = green, filter = verified (not approved)
 import React, { useState, useEffect, useMemo } from "react";
+import barangayLogo from "../../assets/sanroquelogo.png";
+
 import {
   FiUser, FiPhone, FiMapPin, FiHome,
   FiX, FiSearch, FiCheck, FiSlash, FiTrash2, FiShield, FiSun, FiMoon,
@@ -412,7 +414,7 @@ const Validations = () => {
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
-          backgroundImage: 'url("/src/assets/sanroquelogo.png")',
+          backgroundImage: `url(${barangayLogo})`,
           backgroundPosition: "right 35% center",
           backgroundRepeat: "no-repeat",
           backgroundSize: "49%",

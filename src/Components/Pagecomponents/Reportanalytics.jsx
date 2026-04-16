@@ -1,5 +1,7 @@
 // ReportAnalytics.jsx - Firestore version (matches Notiftable.jsx pattern)
 import React, { useState, useEffect, useMemo } from "react";
+import barangayLogo from "../../assets/sanroquelogo.png";
+
 import {
   TrendingUp, Clock, BarChart3, Calendar,
   AlertCircle, CheckCircle, PieChart, Activity, Sparkles, Layers,
@@ -343,7 +345,7 @@ const ReportAnalytics = () => {
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
-          backgroundImage: 'url("/src/assets/sanroquelogo.png")',
+          backgroundImage: `url(${barangayLogo})`,
           backgroundPosition: "right 35% center",
           backgroundRepeat: "no-repeat",
           backgroundSize: "49%",

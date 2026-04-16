@@ -1,5 +1,7 @@
 // HoverDevCards.jsx - Firestore version (matches Notiftable.jsx pattern)
 import React, { useState, useEffect, useMemo } from "react";
+import barangayLogo from "../../assets/sanroquelogo.png";
+
 import {
   FiArrowLeft, FiAlertTriangle, FiClock,
   FiGrid, FiMapPin, FiTrendingUp,
@@ -121,7 +123,7 @@ const HoverDevCards = ({ onPurokSelect, selectedPurok, onBackToDashboard }) => {
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
-          backgroundImage: 'url("/src/assets/sanroquelogo.png")',
+          backgroundImage: `url(${barangayLogo})`,
           backgroundPosition: "right 35% center",
           backgroundRepeat: "no-repeat",
           backgroundSize: "49%",
