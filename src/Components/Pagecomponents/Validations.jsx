@@ -1,11 +1,11 @@
-// Validations.jsx - verified = green, filter = verified (not approved)
+// Validations.jsx - sorted by createdAt (newest first) for both residents & tanods
 import React, { useState, useEffect, useMemo } from "react";
 import barangayLogo from "../../assets/sanroquelogo.png";
 
 import {
   FiUser, FiPhone, FiMapPin, FiHome,
   FiX, FiSearch, FiCheck, FiSlash, FiTrash2, FiShield, FiSun, FiMoon,
-  FiChevronLeft, FiChevronRight,
+  FiChevronLeft, FiChevronRight, FiClock,
 } from "react-icons/fi";
 import {
   getFirestore,
@@ -43,6 +43,109 @@ const statusLabel = (status) => {
   return "Pending";
 };
 
+const toDate = (value) => {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate();
+  if (value instanceof Date) return value;
+  if (typeof value === "object" && typeof value.seconds === "number")
+    return new Date(value.seconds * 1000);
+  if (typeof value === "number") return new Date(value * 1000);
+  if (typeof value === "string") {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+};
+
+const formatDate = (value) => {
+  const d = toDate(value);
+  if (!d) return "—";
+  return d.toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
+// ── Toast Notification ──────────────────────────────────────────────────────
+const Toast = ({ toast, onDismiss }) => {
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(onDismiss, 3000);
+    return () => clearTimeout(timer);
+  }, [toast, onDismiss]);
+
+  if (!toast) return null;
+
+  const isApproved = toast.type === "approved";
+
+  return (
+    <div
+      className="fixed top-6 left-1/2 z-9999 -translate-x-1/2"
+      style={{ animation: "toastSlideIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both" }}
+    >
+      <style>{`
+        @keyframes toastSlideIn {
+          from { opacity: 0; transform: translate(-50%, -28px) scale(0.92); }
+          to   { opacity: 1; transform: translate(-50%, 0)     scale(1);    }
+        }
+        @keyframes toastPop {
+          0%   { transform: scale(1);    }
+          40%  { transform: scale(1.13); }
+          70%  { transform: scale(0.96); }
+          100% { transform: scale(1);    }
+        }
+      `}</style>
+
+      <div
+        className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl border ${
+          isApproved
+            ? "bg-emerald-600 border-emerald-400 text-white"
+            : "bg-rose-600 border-rose-400 text-white"
+        }`}
+        style={{ minWidth: 320 }}
+      >
+        {/* Animated icon circle */}
+        <div
+          className={`flex items-center justify-center w-11 h-11 rounded-full border-2 shrink-0 ${
+            isApproved ? "bg-white/20 border-white/40" : "bg-white/20 border-white/40"
+          }`}
+          style={{ animation: "toastPop 0.5s 0.15s cubic-bezier(0.34,1.56,0.64,1) both" }}
+        >
+          {isApproved ? (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          ) : (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-base font-extrabold leading-tight">
+            {isApproved ? "Successfully Approved!" : "Successfully Declined!"}
+          </p>
+          <p className="text-xs font-semibold opacity-80 mt-0.5 truncate">
+            {toast.name}
+          </p>
+        </div>
+
+        <button
+          onClick={onDismiss}
+          className="ml-2 p-1.5 rounded-full hover:bg-white/20 transition shrink-0"
+        >
+          <FiX size={16} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // ── Pagination Component ────────────────────────────────────────────────────
 const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSize, accent = "indigo" }) => {
   if (totalPages <= 1) return null;
@@ -63,13 +166,10 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSiz
     }
   }
 
-  // Deduplicate consecutive ellipses
   const dedupedPages = pages.filter((p, idx) => !(p === "..." && pages[idx - 1] === "..."));
 
   const btnBase = `inline-flex items-center justify-center w-8 h-8 rounded-lg text-xs font-extrabold border transition`;
-  const activeBtn = accent === "indigo"
-    ? "bg-indigo-600 text-white border-indigo-600 shadow"
-    : "bg-indigo-500 text-white border-indigo-500 shadow";
+  const activeBtn = "bg-indigo-600 text-white border-indigo-600 shadow";
   const inactiveBtn = "bg-white text-gray-700 border-gray-200 hover:bg-gray-50";
   const disabledBtn = "bg-white text-gray-300 border-gray-100 cursor-not-allowed";
 
@@ -123,6 +223,9 @@ const Validations = () => {
   const [loading, setLoading] = useState(true);
   const [tanodLoading, setTanodLoading] = useState(true);
 
+  // Toast state: { type: "approved" | "declined", name: string } | null
+  const [toast, setToast] = useState(null);
+
   // Pagination state
   const [residentPage, setResidentPage] = useState(1);
   const [tanodPage, setTanodPage] = useState(1);
@@ -152,11 +255,12 @@ const Validations = () => {
           });
         });
 
-        const order = { pending: 0, declined: 1, verified: 2 };
         userArray.sort((a, b) => {
-          const ao = order[a.idstatus] ?? 9;
-          const bo = order[b.idstatus] ?? 9;
-          if (ao !== bo) return ao - bo;
+          const da = toDate(a.createdAt);
+          const db = toDate(b.createdAt);
+          if (da && db) return db - da;
+          if (da) return -1;
+          if (db) return 1;
           return (a.complainant || "").localeCompare(b.complainant || "");
         });
 
@@ -191,11 +295,12 @@ const Validations = () => {
         }
       });
 
-      const order = { pending: 0, declined: 1, verified: 2 };
       tanodArray.sort((a, b) => {
-        const ao = order[a.idstatus] ?? 9;
-        const bo = order[b.idstatus] ?? 9;
-        if (ao !== bo) return ao - bo;
+        const da = toDate(a.createdAt);
+        const db = toDate(b.createdAt);
+        if (da && db) return db - da;
+        if (da) return -1;
+        if (db) return 1;
         return (a.complainant || "").localeCompare(b.complainant || "");
       });
 
@@ -334,17 +439,12 @@ const Validations = () => {
     return "No Shift";
   };
 
-  const ShiftIcon = ({ shift, size = 13 }) => {
-    if (shift === "morning") return <FiSun size={size} />;
-    if (shift === "evening") return <FiMoon size={size} />;
-    return null;
-  };
-
   // ── Update / Delete ───────────────────────────────────────────────────────
   const updateStatus = async (id, newStatus) => {
     try {
       const isResident = residents.some(u => u.id === id);
       const isTanod = tanods.some(t => t.id === id);
+      const userName = selectedUser?.complainant || "User";
 
       if (isResident) {
         await updateDoc(doc(firestore, "users", id), { idstatus: newStatus });
@@ -359,6 +459,12 @@ const Validations = () => {
         if (selectedUser?.id === id)
           setSelectedUser((prev) => prev ? { ...prev, idstatus: normalized } : prev);
       }
+
+      // Show toast
+      setToast({
+        type: normalizeStatus(newStatus) === "verified" ? "approved" : "declined",
+        name: userName,
+      });
     } catch (err) {
       console.error("Error updating status:", err);
       alert("Failed to update status.");
@@ -411,6 +517,9 @@ const Validations = () => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
+      {/* Toast Notification */}
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
+
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -430,13 +539,14 @@ const Validations = () => {
             SECTION 1: RESIDENTS
         ══════════════════════════════════════════════════════════════════ */}
 
-        {/* Section Label */}
         <div className="flex items-center gap-3">
           <FiUser className="text-indigo-600" size={22} />
           <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight">Resident Validations</h1>
+          <span className="ml-2 inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-50 text-indigo-600 border border-indigo-200">
+            <FiClock size={11} /> Newest First
+          </span>
         </div>
 
-        {/* Search + Purok */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div />
           <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
@@ -462,9 +572,7 @@ const Validations = () => {
           </div>
         </div>
 
-        {/* Stats + Filter */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Stats */}
           <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-4 gap-4">
             {[
               { key: "total",    value: stats.total,    color: "text-gray-900"    },
@@ -482,7 +590,6 @@ const Validations = () => {
             ))}
           </div>
 
-          {/* Filter buttons */}
           <div className="lg:col-span-4">
             <div className="rounded-2xl border border-white/60 bg-white/75 backdrop-blur shadow-lg p-4">
               <p className="text-xs font-extrabold uppercase tracking-wider text-gray-600 mb-3">Filter</p>
@@ -520,12 +627,16 @@ const Validations = () => {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1040px] text-left">
+                <table className="w-full min-w-[1100px] text-left">
                   <thead className="bg-white sticky top-0 z-10">
                     <tr className="border-b border-gray-200">
-                      {["Name", "Contact", "Purok", "Address", "ID Verification", "Status", "Actions"].map((h) => (
+                      {["Name", "Contact", "Purok", "Address", "Registered", "ID Verification", "Status", "Actions"].map((h) => (
                         <th key={h} className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-gray-600 ${h === "Actions" ? "text-right" : ""}`}>
-                          {h}
+                          {h === "Registered" ? (
+                            <span className="inline-flex items-center gap-1">
+                              <FiClock size={11} /> {h}
+                            </span>
+                          ) : h}
                         </th>
                       ))}
                     </tr>
@@ -539,6 +650,9 @@ const Validations = () => {
                         <td className="px-6 py-4 text-sm font-semibold text-gray-800">{user.number || "—"}</td>
                         <td className="px-6 py-4 text-sm font-semibold text-gray-800">Purok {user.purok || "—"}</td>
                         <td className="px-6 py-4 max-w-sm truncate text-sm text-gray-700" title={user.address || ""}>{user.address || "—"}</td>
+                        <td className="px-6 py-4 text-xs text-gray-500 font-semibold whitespace-nowrap">
+                          {formatDate(user.createdAt)}
+                        </td>
                         <td className="px-6 py-4">
                           {user.idImage ? (
                             <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-emerald-50 text-emerald-700 border-emerald-200">
@@ -565,14 +679,12 @@ const Validations = () => {
                     ))}
                     {filteredUsers.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="text-center py-10 text-gray-500 font-semibold">No registrations found</td>
+                        <td colSpan={8} className="text-center py-10 text-gray-500 font-semibold">No registrations found</td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-
-              {/* Resident Pagination */}
               <Pagination
                 currentPage={residentPage}
                 totalPages={residentTotalPages}
@@ -589,19 +701,19 @@ const Validations = () => {
             SECTION 2: TANOD / EMPLOYEES
         ══════════════════════════════════════════════════════════════════ */}
 
-        {/* Divider */}
         <div className="border-t-2 border-dashed border-indigo-200 pt-4" />
 
-        {/* Section Label */}
         <div className="flex items-center gap-3">
           <FiShield className="text-indigo-600" size={22} />
           <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight">Tanod / Employee Validations</h1>
           <span className="ml-2 px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-100 text-indigo-700 border border-indigo-200">
             {tanods.length} Tanod{tanods.length !== 1 ? "s" : ""}
           </span>
+          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-50 text-indigo-600 border border-indigo-200">
+            <FiClock size={11} /> Newest First
+          </span>
         </div>
 
-        {/* Tanod Search + Purok */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div />
           <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
@@ -627,7 +739,6 @@ const Validations = () => {
           </div>
         </div>
 
-        {/* Tanod Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           {[
             { key: "total",    label: "Total Tanods", value: tanodStats.total,    color: "text-gray-900"    },
@@ -655,12 +766,16 @@ const Validations = () => {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1100px] text-left">
+                <table className="w-full min-w-[1200px] text-left">
                   <thead className="bg-indigo-50 sticky top-0 z-10">
                     <tr className="border-b border-indigo-100">
-                      {["Name", "Contact", "Purok", "Address", "Position", "Shift", "ID Status", "Verification", "Actions"].map((h) => (
+                      {["Name", "Contact", "Purok", "Address", "Position", "Shift", "Registered", "ID Status", "Verification", "Actions"].map((h) => (
                         <th key={h} className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-indigo-700 ${h === "Actions" ? "text-right" : ""}`}>
-                          {h}
+                          {h === "Registered" ? (
+                            <span className="inline-flex items-center gap-1">
+                              <FiClock size={11} /> {h}
+                            </span>
+                          ) : h}
                         </th>
                       ))}
                     </tr>
@@ -703,6 +818,9 @@ const Validations = () => {
                             <option value="evening">🌙 Evening</option>
                           </select>
                         </td>
+                        <td className="px-6 py-4 text-xs text-gray-500 font-semibold whitespace-nowrap">
+                          {formatDate(user.createdAt)}
+                        </td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border ${statusChip(user.idstatus)}`}>
                             {statusLabel(user.idstatus)}
@@ -731,14 +849,12 @@ const Validations = () => {
                     ))}
                     {filteredTanods.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="text-center py-10 text-gray-500 font-semibold">No tanods found</td>
+                        <td colSpan={10} className="text-center py-10 text-gray-500 font-semibold">No tanods found</td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-
-              {/* Tanod Pagination */}
               <Pagination
                 currentPage={tanodPage}
                 totalPages={tanodTotalPages}
@@ -751,7 +867,7 @@ const Validations = () => {
           )}
         </div>
 
-        {/* ── Detail Modal (shared for residents & tanods) ─────────────────── */}
+        {/* ── Detail Modal ─────────────────────────────────────────────────── */}
         {selectedUser && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/35 backdrop-blur-sm z-50 p-4"
             onClick={() => setSelectedUser(null)}>
@@ -790,13 +906,17 @@ const Validations = () => {
                         )}
                       </div>
                       <p className="text-indigo-100 text-xs font-semibold mt-1">ID: {selectedUser.id}</p>
+                      {selectedUser.createdAt && (
+                        <p className="text-indigo-200 text-xs font-semibold mt-0.5 inline-flex items-center gap-1">
+                          <FiClock size={11} /> Registered: {formatDate(selectedUser.createdAt)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
               <div className="p-6 space-y-5">
-                {/* Status badge */}
                 <div className={`p-4 rounded-xl border flex items-center justify-between ${statusChip(selectedUser.idstatus)}`}>
                   <span className="font-extrabold text-sm">
                     Status: {statusLabel(selectedUser.idstatus)}
@@ -809,6 +929,12 @@ const Validations = () => {
                     <InfoRow label="Contact" value={selectedUser.number}      icon={<FiPhone className="text-emerald-600" size={18} />} tone="emerald" />
                     <InfoRow label="Purok"   value={selectedUser.purok ? `Purok ${selectedUser.purok}` : "—"} icon={<FiMapPin className="text-amber-600" size={18} />} tone="amber"   />
                     <InfoRow label="Address" value={selectedUser.address}     icon={<FiHome  className="text-purple-600"  size={18} />} tone="purple"  />
+                    <InfoRow
+                      label="Registered"
+                      value={formatDate(selectedUser.createdAt)}
+                      icon={<FiClock className="text-indigo-400" size={18} />}
+                      tone="indigo"
+                    />
                     {selectedUser.isEmployee && (
                       <InfoRow
                         label="Position"

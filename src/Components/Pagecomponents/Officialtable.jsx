@@ -11,6 +11,8 @@ import {
   FiMail,
   FiPhone,
   FiImage,
+  FiCheckCircle,
+  FiAlertCircle,
 } from "react-icons/fi";
 import {
   collection,
@@ -47,6 +49,155 @@ const splitFullName = (fullName = "") => {
   return { firstName, middleInitial, lastName };
 };
 
+/* =======================
+   SUCCESS TOAST
+======================= */
+function SuccessToast({ message, onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3500);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed top-6 right-6 z-9999 animate-[slideInRight_0.4s_ease-out]">
+      <style>{`
+        @keyframes slideInRight {
+          from { opacity: 0; transform: translateX(60px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+      `}</style>
+      <div className="flex items-center gap-3 bg-white border border-emerald-200 rounded-2xl shadow-2xl px-5 py-4 min-w-[280px] max-w-sm">
+        <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+          <FiCheckCircle size={20} className="text-emerald-600" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-extrabold text-gray-900">Success!</p>
+          <p className="text-xs text-gray-500 font-semibold mt-0.5">{message}</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600 transition"
+        >
+          <FiXCircle size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* =======================
+   CONFIRM ADD MODAL
+======================= */
+function ConfirmAddModal({ form, onConfirm, onCancel, loading }) {
+  const fullName = buildFullName(form);
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-60 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative border border-white/60 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Top accent */}
+        <div className="h-1.5 w-full bg-linear-to-r from-indigo-500 via-purple-500 to-indigo-600" />
+
+        <div className="p-7">
+          {/* Icon + Title */}
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center">
+              <FiAlertCircle size={20} className="text-indigo-600" />
+            </div>
+            <h2 className="text-lg font-extrabold text-gray-900">
+              Confirm Official Creation
+            </h2>
+          </div>
+          <p className="text-sm text-gray-500 font-semibold mb-5 pl-[52px]">
+            Please review the details before confirming.
+          </p>
+
+          {/* Details card */}
+          <div className="bg-gray-50 rounded-2xl border border-gray-100 divide-y divide-gray-100 mb-6">
+            {/* Photo preview if available */}
+            {form.picture && (
+              <div className="px-5 py-4 flex items-center gap-3">
+                <img
+                  src={form.picture}
+                  alt="Preview"
+                  className="w-12 h-12 rounded-xl object-cover border border-gray-200 shadow-sm"
+                />
+                <span className="text-xs font-semibold text-gray-500">Profile Photo</span>
+              </div>
+            )}
+
+            <div className="px-5 py-3.5">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">
+                Full Name
+              </p>
+              <p className="text-sm font-extrabold text-gray-900">{fullName || "—"}</p>
+            </div>
+
+            <div className="px-5 py-3.5">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">
+                Position
+              </p>
+              <p className="text-sm font-extrabold text-gray-900">{form.position}</p>
+            </div>
+
+            {form.email && (
+              <div className="px-5 py-3.5">
+                <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">
+                  Email
+                </p>
+                <p className="text-sm font-extrabold text-gray-900">{form.email}</p>
+              </div>
+            )}
+
+            {form.contactNumber && (
+              <div className="px-5 py-3.5">
+                <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">
+                  Contact Number
+                </p>
+                <p className="text-sm font-extrabold text-gray-900">{form.contactNumber}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Buttons */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onCancel}
+              disabled={loading}
+              className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-700 font-extrabold text-sm hover:bg-slate-200 transition disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className="flex-1 py-3 rounded-xl bg-linear-to-r from-indigo-600 to-purple-600 text-white font-extrabold text-sm hover:from-indigo-700 hover:to-purple-700 transition shadow-md disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <FiCheckCircle size={15} /> Confirm &amp; Create
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OfficialTable() {
   const [officials, setOfficials] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -55,6 +206,11 @@ export default function OfficialTable() {
   const [form, setForm] = useState(emptyForm);
   const [selectedOfficial, setSelectedOfficial] = useState(null);
   const [showFormModal, setShowFormModal] = useState(false);
+
+  // Confirmation & success state
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   const positionOptions = useMemo(
     () => [
@@ -118,8 +274,8 @@ export default function OfficialTable() {
     });
   }, [officials, searchTerm, positionFilter]);
 
-  // CRUD
-  const createOfficial = async () => {
+  // VALIDATION before showing confirm modal
+  const handleAddClick = () => {
     if (!form.firstName.trim() || !form.lastName.trim())
       return alert("Please enter at least First Name and Last Name.");
 
@@ -128,6 +284,12 @@ export default function OfficialTable() {
       if (existingKapitan) return alert("Only one Kapitan can be added!");
     }
 
+    setShowConfirmModal(true);
+  };
+
+  // CONFIRMED CREATE
+  const createOfficial = async () => {
+    setConfirmLoading(true);
     try {
       await addDoc(collection(db, "officials"), {
         name: buildFullName(form),
@@ -138,6 +300,8 @@ export default function OfficialTable() {
       });
       setForm(emptyForm);
       setShowFormModal(false);
+      setShowConfirmModal(false);
+      setSuccessMessage(`${buildFullName(form)} has been successfully added as ${form.position}.`);
     } catch (err) {
       console.error("Error creating official:", err);
       alert(
@@ -145,6 +309,8 @@ export default function OfficialTable() {
           ? "You don't have permission to add officials."
           : `Error: ${err.message}`
       );
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -175,6 +341,7 @@ export default function OfficialTable() {
       setEditing(null);
       setForm(emptyForm);
       setShowFormModal(false);
+      setSuccessMessage(`${buildFullName(form)}'s information has been successfully updated.`);
     } catch (err) {
       console.error("Error updating official:", err);
       alert(
@@ -189,6 +356,7 @@ export default function OfficialTable() {
     if (!confirm("Delete this official?")) return;
     try {
       await deleteDoc(doc(db, "officials", id));
+      setSuccessMessage("Official has been successfully deleted.");
     } catch (err) {
       console.error("Error deleting official:", err);
       alert(
@@ -207,6 +375,14 @@ export default function OfficialTable() {
 
   return (
     <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
+      {/* Success Toast */}
+      {successMessage && (
+        <SuccessToast
+          message={successMessage}
+          onClose={() => setSuccessMessage("")}
+        />
+      )}
+
       {/* Watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -250,7 +426,6 @@ export default function OfficialTable() {
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/80 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
-              {/* Add Official Button */}
               <button
                 onClick={() => { setEditing(null); setForm(emptyForm); setShowFormModal(true); }}
                 className="inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-extrabold hover:bg-emerald-700 transition shadow-md whitespace-nowrap text-sm"
@@ -311,7 +486,6 @@ export default function OfficialTable() {
                       idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
                     } hover:bg-indigo-50/60`}
                   >
-                    {/* Official */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center overflow-hidden shrink-0">
@@ -333,7 +507,6 @@ export default function OfficialTable() {
                       </div>
                     </td>
 
-                    {/* Position */}
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold ${
                         o.position === "Kapitan"
@@ -344,7 +517,6 @@ export default function OfficialTable() {
                       </span>
                     </td>
 
-                    {/* Contact */}
                     <td className="px-6 py-4">
                       <div className="space-y-1">
                         {o.email && (
@@ -365,7 +537,6 @@ export default function OfficialTable() {
                       </div>
                     </td>
 
-                    {/* Actions */}
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
                         <button
@@ -437,13 +608,12 @@ export default function OfficialTable() {
             {/* Modal Body */}
             <div className="p-7 space-y-5">
 
-              {/* Name Row — 3 separate fields */}
+              {/* Name Row */}
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 mb-3">
                   Full Name
                 </p>
                 <div className="grid grid-cols-12 gap-3">
-                  {/* First Name */}
                   <div className="col-span-12 sm:col-span-5">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
                       First Name <span className="text-rose-500">*</span>
@@ -456,7 +626,6 @@ export default function OfficialTable() {
                     />
                   </div>
 
-                  {/* Middle Initial */}
                   <div className="col-span-12 sm:col-span-2">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
                       M.I.
@@ -470,7 +639,6 @@ export default function OfficialTable() {
                     />
                   </div>
 
-                  {/* Last Name */}
                   <div className="col-span-12 sm:col-span-5">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
                       Last Name <span className="text-rose-500">*</span>
@@ -484,7 +652,6 @@ export default function OfficialTable() {
                   </div>
                 </div>
 
-                {/* Live preview */}
                 {(form.firstName || form.lastName) && (
                   <p className="mt-2 text-xs text-indigo-600 font-extrabold">
                     Preview: {buildFullName(form) || "—"}
@@ -596,8 +763,9 @@ export default function OfficialTable() {
                   </>
                 ) : (
                   <>
+                    {/* Add button now triggers confirmation modal */}
                     <button
-                      onClick={createOfficial}
+                      onClick={handleAddClick}
                       className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl font-extrabold hover:bg-emerald-700 transition shadow-md text-sm"
                     >
                       <FiPlus size={15} /> Add Official
@@ -614,6 +782,16 @@ export default function OfficialTable() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* CONFIRMATION MODAL (Add only) */}
+      {showConfirmModal && (
+        <ConfirmAddModal
+          form={form}
+          loading={confirmLoading}
+          onConfirm={createOfficial}
+          onCancel={() => setShowConfirmModal(false)}
+        />
       )}
 
       {/* Official Detail Modal */}

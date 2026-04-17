@@ -14,6 +14,8 @@ import {
   FiEyeOff,
   FiChevronLeft,
   FiChevronRight,
+  FiCheckCircle,
+  FiAlertCircle,
 } from "react-icons/fi";
 import {
   collection,
@@ -29,7 +31,7 @@ import { firestore as db } from "../../firebaseConfig";
 const emptyForm = {
   firstName: "",
   lastName: "",
-  middleName: "",
+  middleInitial: "",
   suffix: "",
   position: "BARANGAY UTILITY",
   email: "",
@@ -60,6 +62,146 @@ const positionOptions = [
   "BANTAY BAYAN/DRIVER",
   "LUPON TAGAPAMAYAPA",
 ];
+
+// ── Success Toast ─────────────────────────────────────────────────────────────
+function SuccessToast({ message, onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3500);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed top-6 right-6 z-9999 animate-[slideInRight_0.4s_ease-out]">
+      <style>{`
+        @keyframes slideInRight {
+          from { opacity: 0; transform: translateX(60px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+      `}</style>
+      <div className="flex items-center gap-3 bg-white border border-emerald-200 rounded-2xl shadow-2xl px-5 py-4 min-w-[280px] max-w-sm">
+        <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+          <FiCheckCircle size={20} className="text-emerald-600" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-extrabold text-gray-900">Success!</p>
+          <p className="text-xs text-gray-500 font-semibold mt-0.5">{message}</p>
+        </div>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
+          <FiXCircle size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Confirm Add Modal ─────────────────────────────────────────────────────────
+function ConfirmAddModal({ form, onConfirm, onCancel, loading }) {
+  const fullName = [form.firstName, form.middleInitial?.trim() ? `${form.middleInitial.trim().replace(/\.?$/, "")}.` : "", form.lastName, form.suffix]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-60 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative border border-white/60 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Top accent */}
+        <div className="h-1.5 w-full bg-linear-to-r from-indigo-500 via-purple-500 to-indigo-600" />
+
+        <div className="p-7">
+          {/* Icon + Title */}
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center">
+              <FiAlertCircle size={20} className="text-indigo-600" />
+            </div>
+            <h2 className="text-lg font-extrabold text-gray-900">
+              Confirm Employee Creation
+            </h2>
+          </div>
+          <p className="text-sm text-gray-500 font-semibold mb-5 pl-[52px]">
+            Please review the details before confirming.
+          </p>
+
+          {/* Details card */}
+          <div className="bg-gray-50 rounded-2xl border border-gray-100 divide-y divide-gray-100 mb-6">
+            <div className="px-5 py-3.5">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">
+                Full Name
+              </p>
+              <p className="text-sm font-extrabold text-gray-900">{fullName || "—"}</p>
+            </div>
+
+            <div className="px-5 py-3.5">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">
+                Position
+              </p>
+              <p className="text-sm font-extrabold text-gray-900">{form.position}</p>
+            </div>
+
+            <div className="px-5 py-3.5">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">
+                Login Email
+              </p>
+              <p className="text-sm font-extrabold text-gray-900">{form.email || "—"}</p>
+            </div>
+
+            {form.number && (
+              <div className="px-5 py-3.5">
+                <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">
+                  Phone Number
+                </p>
+                <p className="text-sm font-extrabold text-gray-900">{form.number}</p>
+              </div>
+            )}
+
+            {form.purok && (
+              <div className="px-5 py-3.5">
+                <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">
+                  Purok
+                </p>
+                <p className="text-sm font-extrabold text-gray-900">{form.purok}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Buttons */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onCancel}
+              disabled={loading}
+              className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-700 font-extrabold text-sm hover:bg-slate-200 transition disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className="flex-1 py-3 rounded-xl bg-linear-to-r from-indigo-600 to-purple-600 text-white font-extrabold text-sm hover:from-indigo-700 hover:to-purple-700 transition shadow-md disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <FiCheckCircle size={15} /> Confirm &amp; Create
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Pagination ────────────────────────────────────────────────────────────────
 const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSize }) => {
@@ -137,6 +279,7 @@ export default function EmployeeTable() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -228,7 +371,7 @@ export default function EmployeeTable() {
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return employeesWithRating.filter((e) => {
-      const fullName = `${e.firstName || ""} ${e.middleName || ""} ${e.lastName || ""}`.toLowerCase();
+      const fullName = `${e.firstName || ""} ${e.middleInitial || ""} ${e.lastName || ""}`.toLowerCase();
       const matchesSearch = fullName.includes(term) || (e.position || "").toLowerCase().includes(term);
       const matchesFilter =
         filter === "all" ||
@@ -247,8 +390,10 @@ export default function EmployeeTable() {
   }, [filtered, currentPage]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  const getFullName = (e) =>
-    [e.firstName, e.middleName ? e.middleName + "." : "", e.lastName, e.suffix].filter(Boolean).join(" ");
+  const getFullName = (e) => {
+    const mi = e.middleInitial?.trim() ? `${e.middleInitial.trim().replace(/\.?$/, "")}.` : "";
+    return [e.firstName, mi, e.lastName, e.suffix].filter(Boolean).join(" ");
+  };
 
   const getRatingBadge = (rating) => {
     if (rating === null || rating === undefined) return "bg-slate-100 text-slate-700 border-slate-200";
@@ -287,7 +432,6 @@ export default function EmployeeTable() {
   };
 
   const createEmployee = async () => {
-    setShowConfirm(false);
     setCreating(true);
     try {
       const res = await fetch(`${API_URL}/api/create-employee`, {
@@ -298,7 +442,7 @@ export default function EmployeeTable() {
           password: form.password,
           firstName: capitalize(form.firstName.trim()),
           lastName: capitalize(form.lastName.trim()),
-          middleName: capitalize(form.middleName.trim()),
+          middleInitial: form.middleInitial.trim().toUpperCase(),
           suffix: form.suffix.trim(),
           position: form.position,
           number: form.number.trim(),
@@ -312,9 +456,18 @@ export default function EmployeeTable() {
         const empId = data.employeeId || data.uid;
         await updateDoc(doc(db, "employee", empId), { idstatus: null });
       }
+      const createdName = [
+        capitalize(form.firstName.trim()),
+        form.middleInitial?.trim() ? `${form.middleInitial.trim().toUpperCase().replace(/\.?$/, "")}.` : "",
+        capitalize(form.lastName.trim()),
+        form.suffix.trim(),
+      ].filter(Boolean).join(" ");
+
       setForm(emptyForm);
       setFormErrors({});
+      setShowConfirm(false);
       setShowFormModal(false);
+      setSuccessMessage(`${createdName} has been successfully added as ${form.position}.`);
     } catch (err) {
       console.error("Error creating employee:", err);
       alert("Failed to connect to backend. Make sure the server is running.");
@@ -328,7 +481,7 @@ export default function EmployeeTable() {
     setForm({
       firstName: e.firstName || "",
       lastName: e.lastName || "",
-      middleName: e.middleName || "",
+      middleInitial: e.middleInitial || "",
       suffix: e.suffix || "",
       position: e.position || "BARANGAY UTILITY",
       number: e.number || "",
@@ -348,14 +501,22 @@ export default function EmployeeTable() {
       purok: form.purok.trim(),
       address: form.address.trim(),
     });
+    const updatedName = [
+      form.firstName,
+      form.middleInitial?.trim() ? `${form.middleInitial.trim().replace(/\.?$/, "")}.` : "",
+      form.lastName,
+      form.suffix,
+    ].filter(Boolean).join(" ");
     setEditing(null);
     setForm(emptyForm);
     setShowFormModal(false);
+    setSuccessMessage(`${updatedName}'s information has been successfully updated.`);
   };
 
   const deleteEmployee = async (id) => {
     if (!confirm("Delete this employee?")) return;
     await deleteDoc(doc(db, "employee", id));
+    setSuccessMessage("Employee has been successfully deleted.");
   };
 
   const closeFormModal = () => {
@@ -369,6 +530,15 @@ export default function EmployeeTable() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
+
+      {/* Success Toast */}
+      {successMessage && (
+        <SuccessToast
+          message={successMessage}
+          onClose={() => setSuccessMessage("")}
+        />
+      )}
+
       {/* Watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -595,7 +765,7 @@ export default function EmployeeTable() {
               {/* Section: Name */}
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-2">
-                  <span className="inline-block w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-extrabold">1</span>
+                  <span className="inline-flex w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] items-center justify-center font-extrabold">1</span>
                   Personal Information
                 </p>
                 <div className="grid grid-cols-12 gap-3">
@@ -616,17 +786,18 @@ export default function EmployeeTable() {
                     {formErrors.firstName && <p className="text-xs text-red-500 mt-1">{formErrors.firstName}</p>}
                   </div>
 
-                  {/* Middle Name */}
-                  <div className="col-span-12 sm:col-span-3">
+                  {/* Middle Initial */}
+                  <div className="col-span-12 sm:col-span-2">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                      Middle Name
+                      M.I.
                     </label>
                     <input
-                      placeholder="e.g., Fuentes"
-                      value={form.middleName}
+                      placeholder="e.g., F"
+                      maxLength={2}
+                      value={form.middleInitial}
                       disabled={!!editing}
-                      onChange={(e) => setForm({ ...form, middleName: e.target.value })}
-                      className={`w-full border rounded-xl px-4 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
+                      onChange={(e) => setForm({ ...form, middleInitial: e.target.value.toUpperCase() })}
+                      className={`w-full border rounded-xl px-3 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-center tracking-widest
                         ${editing ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-100" : "bg-white border-gray-200"}`}
                     />
                   </div>
@@ -649,7 +820,7 @@ export default function EmployeeTable() {
                   </div>
 
                   {/* Suffix */}
-                  <div className="col-span-12 sm:col-span-1">
+                  <div className="col-span-12 sm:col-span-2">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
                       Suffix
                     </label>
@@ -664,6 +835,19 @@ export default function EmployeeTable() {
                   </div>
                 </div>
 
+                {/* Full name preview */}
+                {!editing && (form.firstName || form.lastName) && (
+                  <p className="mt-2 text-xs text-indigo-600 font-extrabold">
+                    Preview:{" "}
+                    {[
+                      form.firstName,
+                      form.middleInitial?.trim() ? `${form.middleInitial.trim().replace(/\.?$/, "")}.` : "",
+                      form.lastName,
+                      form.suffix,
+                    ].filter(Boolean).join(" ") || "—"}
+                  </p>
+                )}
+
                 {editing && (
                   <p className="mt-2 text-xs text-amber-600 font-semibold flex items-center gap-1">
                     ⚠️ Name fields are locked after creation.
@@ -674,7 +858,7 @@ export default function EmployeeTable() {
               {/* Section: Position & Contact */}
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-2">
-                  <span className="inline-block w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-extrabold">2</span>
+                  <span className="inline-flex w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] items-center justify-center font-extrabold">2</span>
                   Position & Contact
                 </p>
                 <div className="grid grid-cols-12 gap-3">
@@ -736,7 +920,7 @@ export default function EmployeeTable() {
               {!editing && (
                 <div>
                   <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-2">
-                    <span className="inline-block w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-extrabold">3</span>
+                    <span className="inline-flex w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] items-center justify-center font-extrabold">3</span>
                     Account Credentials
                   </p>
                   <div className="grid grid-cols-12 gap-3">
@@ -812,11 +996,7 @@ export default function EmployeeTable() {
                         creating ? "bg-gray-400 text-white cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
                       }`}
                     >
-                      {creating ? (
-                        <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Creating...</>
-                      ) : (
-                        <><FiPlus size={15} /> Add Employee</>
-                      )}
+                      <FiPlus size={15} /> Add Employee
                     </button>
                     <button
                       onClick={closeFormModal}
@@ -832,45 +1012,16 @@ export default function EmployeeTable() {
         </div>
       )}
 
-      {/* Confirmation Modal */}
+      {/* =====================
+          CONFIRM ADD MODAL
+      ===================== */}
       {showConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4 border border-white/60">
-            <h3 className="text-lg font-extrabold text-gray-900 mb-2">Confirm Employee Creation</h3>
-            <p className="text-sm text-gray-500 font-semibold mb-4">Please review the login credentials before confirming.</p>
-            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-5 space-y-1">
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-600 mb-2">Login Username</p>
-              <p className="text-sm font-extrabold text-indigo-900">{form.email}</p>
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-600 mt-3 mb-1">Full Name</p>
-              <p className="text-sm font-extrabold text-indigo-900">
-                {[form.firstName, form.middleName, form.lastName, form.suffix].filter(Boolean).join(" ")}
-              </p>
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-600 mt-3 mb-1">Position</p>
-              <p className="text-sm font-extrabold text-indigo-900">{form.position}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="flex-1 px-5 py-2.5 rounded-xl font-extrabold bg-slate-100 text-slate-800 hover:bg-slate-200 transition text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={createEmployee}
-                disabled={creating}
-                className={`flex-1 px-5 py-2.5 rounded-xl font-extrabold transition shadow-md text-sm ${
-                  creating ? "bg-gray-400 text-white cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
-                }`}
-              >
-                {creating ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Creating...
-                  </span>
-                ) : "Confirm & Create"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmAddModal
+          form={form}
+          loading={creating}
+          onConfirm={createEmployee}
+          onCancel={() => setShowConfirm(false)}
+        />
       )}
 
       {/* Feedback Modal */}
@@ -956,7 +1107,8 @@ function FeedbackModal({ employee, onClose }) {
     return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
-  const fullName = [employee.firstName, employee.middleName, employee.lastName].filter(Boolean).join(" ");
+  const mi = employee.middleInitial?.trim() ? `${employee.middleInitial.trim().replace(/\.?$/, "")}.` : "";
+  const fullName = [employee.firstName, mi, employee.lastName].filter(Boolean).join(" ");
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>
