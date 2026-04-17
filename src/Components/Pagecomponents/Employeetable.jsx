@@ -28,7 +28,7 @@ import { firestore as db } from "../../firebaseConfig";
 
 const emptyForm = { firstName: "", lastName: "", middleName: "", suffix: "", position: "BARANGAY UTILITY", email: "", password: "", number: "", purok: "", address: "" };
 
-const API_URL = "http://localhost:5000";
+const API_URL = "https://talk2kap-backend.onrender.com"; // Change to your backend URL
 const PAGE_SIZE = 10;
 
 const capitalize = (str) => {
