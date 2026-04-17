@@ -26,9 +26,20 @@ import {
 } from "firebase/firestore";
 import { firestore as db } from "../../firebaseConfig";
 
-const emptyForm = { firstName: "", lastName: "", middleName: "", suffix: "", position: "BARANGAY UTILITY", email: "", password: "", number: "", purok: "", address: "" };
+const emptyForm = {
+  firstName: "",
+  lastName: "",
+  middleName: "",
+  suffix: "",
+  position: "BARANGAY UTILITY",
+  email: "",
+  password: "",
+  number: "",
+  purok: "",
+  address: "",
+};
 
-const API_URL = "https://talk2kap-backend.onrender.com"; // Change to your backend URL
+const API_URL = "https://talk2kap-backend.onrender.com";
 const PAGE_SIZE = 10;
 
 const capitalize = (str) => {
@@ -50,7 +61,7 @@ const positionOptions = [
   "LUPON TAGAPAMAYAPA",
 ];
 
-// ── Pagination Component ──────────────────────────────────────────────────────
+// ── Pagination ────────────────────────────────────────────────────────────────
 const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSize }) => {
   if (totalPages <= 1) return null;
 
@@ -63,11 +74,8 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSiz
   const right = currentPage + delta;
 
   for (let i = 1; i <= totalPages; i++) {
-    if (i === 1 || i === totalPages || (i >= left && i <= right)) {
-      pages.push(i);
-    } else if (i === left - 1 || i === right + 1) {
-      pages.push("...");
-    }
+    if (i === 1 || i === totalPages || (i >= left && i <= right)) pages.push(i);
+    else if (i === left - 1 || i === right + 1) pages.push("...");
   }
 
   const dedupedPages = pages.filter(
@@ -118,34 +126,30 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSiz
   );
 };
 
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function EmployeeTable() {
   const [employees, setEmployees] = useState([]);
   const [feedbackMap, setFeedbackMap] = useState({});
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [selectedEmployeeForFeedback, setSelectedEmployeeForFeedback] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showFormModal, setShowFormModal] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [filter, setFilter] = useState("all");
   const [positionFilter, setPositionFilter] = useState("All Positions");
-
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Reset page when filters/search change
   useEffect(() => { setCurrentPage(1); }, [searchTerm, filter, positionFilter]);
 
   // ── Fetch employees ───────────────────────────────────────────────────────
   useEffect(() => {
     const empCol = collection(db, "employee");
     const empQuery = query(empCol, where("isEmployee", "==", true), where("idstatus", "==", "verified"));
-
     const unsubscribe = onSnapshot(empQuery, (snapshot) => {
       const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       list.sort((a, b) => {
@@ -155,7 +159,6 @@ export default function EmployeeTable() {
       });
       setEmployees(list);
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -169,7 +172,6 @@ export default function EmployeeTable() {
       employeeSnapshot.forEach((empDoc) => {
         const empId = empDoc.id;
         const deploymentHistoryRef = collection(db, "employee", empId, "deploymentHistory");
-
         const unsubHistory = onSnapshot(deploymentHistoryRef, (historySnap) => {
           const empFeedbacks = [];
           historySnap.forEach((histDoc) => {
@@ -198,9 +200,7 @@ export default function EmployeeTable() {
   }, []);
 
   useEffect(() => {
-    if (!editing) {
-      setForm((prev) => ({ ...prev, email: "", password: "" }));
-    }
+    if (!editing) setForm((prev) => ({ ...prev, email: "", password: "" }));
   }, [editing]);
 
   // ── Computed ──────────────────────────────────────────────────────────────
@@ -210,12 +210,10 @@ export default function EmployeeTable() {
       const ratings = feedbacks
         .map((f) => { const n = Number(f.rating); return !isNaN(n) && n > 0 ? n : null; })
         .filter((r) => r !== null);
-
       const rating =
         ratings.length > 0
           ? Number((ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1))
           : null;
-
       return { ...e, rating, feedbacks };
     });
   }, [employees, feedbackMap]);
@@ -242,7 +240,6 @@ export default function EmployeeTable() {
     });
   }, [employeesWithRating, searchTerm, filter, positionFilter]);
 
-  // ── Pagination ────────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
@@ -251,7 +248,7 @@ export default function EmployeeTable() {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const getFullName = (e) =>
-    [e.firstName, e.middleName ? e.middleName + "." : "", e.lastName].filter(Boolean).join(" ");
+    [e.firstName, e.middleName ? e.middleName + "." : "", e.lastName, e.suffix].filter(Boolean).join(" ");
 
   const getRatingBadge = (rating) => {
     if (rating === null || rating === undefined) return "bg-slate-100 text-slate-700 border-slate-200";
@@ -317,6 +314,7 @@ export default function EmployeeTable() {
       }
       setForm(emptyForm);
       setFormErrors({});
+      setShowFormModal(false);
     } catch (err) {
       console.error("Error creating employee:", err);
       alert("Failed to connect to backend. Make sure the server is running.");
@@ -339,6 +337,7 @@ export default function EmployeeTable() {
       email: "",
       password: "",
     });
+    setShowFormModal(true);
   };
 
   const saveEdit = async () => {
@@ -351,6 +350,7 @@ export default function EmployeeTable() {
     });
     setEditing(null);
     setForm(emptyForm);
+    setShowFormModal(false);
   };
 
   const deleteEmployee = async (id) => {
@@ -358,18 +358,18 @@ export default function EmployeeTable() {
     await deleteDoc(doc(db, "employee", id));
   };
 
-  const openFeedbackModal = (employee) => {
-    const feedbacks = feedbackMap[employee.id] || [];
-    const rating = feedbacks.length > 0
-      ? (feedbacks.reduce((sum, fb) => sum + (fb.rating || 0), 0) / feedbacks.length).toFixed(1)
-      : 0;
-    setSelectedEmployeeForFeedback({ ...employee, feedbacks, rating });
-    setShowFeedbackModal(true);
+  const closeFormModal = () => {
+    setShowFormModal(false);
+    setEditing(null);
+    setForm(emptyForm);
+    setFormErrors({});
+    setShowPassword(false);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="relative min-h-screen linear from-slate-50 via-indigo-50 to-blue-50">
+    <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
+      {/* Watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -384,6 +384,7 @@ export default function EmployeeTable() {
       />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-8 space-y-6">
+
         {/* Header */}
         <div className="bg-white/80 backdrop-blur rounded-2xl shadow-xl border border-white/60 overflow-hidden">
           <div className="px-6 py-5 md:px-7 md:py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -396,15 +397,25 @@ export default function EmployeeTable() {
                 <p className="text-sm text-gray-600 font-semibold">Manage employees and view citizen feedback ratings.</p>
               </div>
             </div>
-            <div className="relative w-full md:w-[420px]">
-              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by name or position..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/80 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
+
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <div className="relative flex-1 md:w-[340px]">
+                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by name or position..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/80 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+              {/* Add Employee Button */}
+              <button
+                onClick={() => { setEditing(null); setForm(emptyForm); setFormErrors({}); setShowFormModal(true); }}
+                className="inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-extrabold hover:bg-emerald-700 transition shadow-md whitespace-nowrap text-sm"
+              >
+                <FiPlus size={16} /> Add Employee
+              </button>
             </div>
           </div>
         </div>
@@ -439,172 +450,6 @@ export default function EmployeeTable() {
           </div>
         </div>
 
-        {/* Add / Edit Form */}
-        <div className="bg-white/80 backdrop-blur rounded-2xl shadow-xl border border-white/60 p-6">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <h3 className="text-base md:text-lg font-extrabold text-gray-900">
-                {editing ? "Edit Employee" : "Add Employee"}
-              </h3>
-              <p className="text-sm text-gray-600 font-semibold mt-1">
-                Keep names and positions consistent for clean reports.
-              </p>
-            </div>
-            {editing && (
-              <span className="text-xs font-extrabold px-3 py-2 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-                Editing mode
-              </span>
-            )}
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {/* Row 1: Name fields */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-              <div className="md:col-span-3">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">First Name *</label>
-                <input placeholder="e.g., Maria" value={form.firstName} disabled={!!editing}
-                  onChange={(e) => { setForm({ ...form, firstName: e.target.value }); setFormErrors((p) => ({ ...p, firstName: undefined })); }}
-                  className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${editing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''} ${formErrors.firstName ? 'border-red-400' : 'border-gray-200'}`} />
-                {formErrors.firstName && <p className="text-xs text-red-500 mt-1">{formErrors.firstName}</p>}
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Middle Name</label>
-                <input placeholder="e.g., F" value={form.middleName} disabled={!!editing}
-                  onChange={(e) => setForm({ ...form, middleName: e.target.value })}
-                  className={`w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${editing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`} />
-              </div>
-              <div className="md:col-span-3">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Last Name *</label>
-                <input placeholder="e.g., Santos" value={form.lastName} disabled={!!editing}
-                  onChange={(e) => { setForm({ ...form, lastName: e.target.value }); setFormErrors((p) => ({ ...p, lastName: undefined })); }}
-                  className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${editing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''} ${formErrors.lastName ? 'border-red-400' : 'border-gray-200'}`} />
-                {formErrors.lastName && <p className="text-xs text-red-500 mt-1">{formErrors.lastName}</p>}
-              </div>
-              <div className="md:col-span-1">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Suffix</label>
-                <input placeholder="Jr." value={form.suffix} disabled={!!editing}
-                  onChange={(e) => setForm({ ...form, suffix: e.target.value })}
-                  className={`w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${editing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`} />
-              </div>
-              <div className="md:col-span-3">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Position</label>
-                <select value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  {positionOptions.filter((p) => p !== "All Positions").map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Row 2: Contact + Location */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-              <div className="md:col-span-3">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Phone Number</label>
-                <input type="tel" placeholder="e.g., 09123456789" value={form.number}
-                  onChange={(e) => setForm({ ...form, number: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Purok</label>
-                <select value={form.purok} onChange={(e) => setForm({ ...form, purok: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  <option value="">Select</option>
-                  {["1","2","3","4","5","6"].map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-              <div className="md:col-span-3">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Address</label>
-                <input placeholder="lot/block/street" value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-
-              {!editing && (
-                <>
-                  <div className="md:col-span-2">
-                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Email *</label>
-                    <input type="email" name="new-email-field" autoComplete="new-email" value={form.email}
-                      onChange={(e) => { setForm({ ...form, email: e.target.value }); setFormErrors((p) => ({ ...p, email: undefined })); }}
-                      className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${formErrors.email ? 'border-red-400' : 'border-gray-200'}`} />
-                    {formErrors.email && <p className="text-xs text-red-500 mt-1">{formErrors.email}</p>}
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Password *</label>
-                    <div className="relative">
-                      <input type={showPassword ? "text" : "password"} name="new-password-field" autoComplete="new-password" value={form.password}
-                        onChange={(e) => { setForm({ ...form, password: e.target.value }); setFormErrors((p) => ({ ...p, password: undefined })); }}
-                        className={`w-full border rounded-xl px-4 py-2.5 pr-10 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${formErrors.password ? 'border-red-400' : 'border-gray-200'}`} />
-                      <button type="button" onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
-                        {showPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
-                      </button>
-                    </div>
-                    {formErrors.password && <p className="text-xs text-red-500 mt-1">{formErrors.password}</p>}
-                  </div>
-                </>
-              )}
-
-              {editing && <div className="md:col-span-4" />}
-            </div>
-
-            {/* Row 3: Actions */}
-            <div className="flex items-center gap-2 pt-1">
-              {editing ? (
-                <>
-                  <button onClick={saveEdit}
-                    className="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-extrabold hover:bg-indigo-700 transition shadow-md text-sm">
-                    <FiEdit2 /> Save Changes
-                  </button>
-                  <button onClick={() => { setEditing(null); setForm(emptyForm); }}
-                    className="inline-flex items-center justify-center gap-2 bg-slate-200 text-slate-800 px-5 py-2.5 rounded-xl font-extrabold hover:bg-slate-300 transition text-sm">
-                    <FiXCircle /> Cancel
-                  </button>
-                </>
-              ) : (
-                <button onClick={handleAddClick} disabled={creating}
-                  className={`inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-extrabold transition shadow-md text-sm ${
-                    creating ? "bg-gray-400 text-white cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
-                  }`}>
-                  {creating ? (
-                    <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Creating...</>
-                  ) : (
-                    <><FiPlus /> Add Employee</>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Confirmation Modal */}
-        {showConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-extrabold text-gray-900 mb-3">Confirm Employee Creation</h3>
-              <p className="text-sm text-gray-600 mb-2">Are you sure you want to create this employee?</p>
-              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 mb-4">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-indigo-600 mb-1">Login Username</p>
-                <p className="text-sm font-bold text-indigo-900">{form.email}</p>
-              </div>
-              <div className="flex items-center gap-2 justify-end">
-                <button onClick={() => setShowConfirm(false)}
-                  className="px-5 py-2.5 rounded-xl font-extrabold bg-slate-200 text-slate-800 hover:bg-slate-300 transition text-sm">
-                  Cancel
-                </button>
-                <button onClick={createEmployee} disabled={creating}
-                  className={`px-5 py-2.5 rounded-xl font-extrabold transition shadow-md text-sm ${
-                    creating ? "bg-gray-400 text-white cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
-                  }`}>
-                  {creating ? (
-                    <span className="flex items-center gap-2"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Creating...</span>
-                  ) : "Confirm"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Table */}
         <div className="bg-white/80 backdrop-blur rounded-2xl shadow-2xl border border-white/60 overflow-hidden">
           <div className="overflow-x-auto">
@@ -618,17 +463,17 @@ export default function EmployeeTable() {
                   ))}
                 </tr>
               </thead>
-
               <tbody>
                 {paginated.map((e, idx) => (
-                  <tr key={e.id}
-                    className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-indigo-50/60`}>
+                  <tr
+                    key={e.id}
+                    className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-indigo-50/60`}
+                  >
                     {/* Name */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {e.avatar ? (
-                          <img src={e.avatar} alt={getFullName(e)}
-                            className="w-9 h-9 rounded-xl object-cover shrink-0 ring-2 ring-indigo-200" />
+                          <img src={e.avatar} alt={getFullName(e)} className="w-9 h-9 rounded-xl object-cover shrink-0 ring-2 ring-indigo-200" />
                         ) : (
                           <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
                             <FiUser />
@@ -661,8 +506,10 @@ export default function EmployeeTable() {
 
                     {/* Feedback */}
                     <td className="px-6 py-4">
-                      <button onClick={() => setSelectedEmployee(e)}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-indigo-700 font-extrabold text-xs shadow-sm transition">
+                      <button
+                        onClick={() => setSelectedEmployee(e)}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-indigo-700 font-extrabold text-xs shadow-sm transition"
+                      >
                         <FiMessageCircle />
                         {e.feedbacks.length} {e.feedbacks.length === 1 ? "feedback" : "feedbacks"}
                       </button>
@@ -671,12 +518,16 @@ export default function EmployeeTable() {
                     {/* Actions */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => startEdit(e)}
-                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 font-extrabold text-xs transition shadow-sm">
+                        <button
+                          onClick={() => startEdit(e)}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 font-extrabold text-xs transition shadow-sm"
+                        >
                           <FiEdit2 /> Edit
                         </button>
-                        <button onClick={() => deleteEmployee(e.id)}
-                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 font-extrabold text-xs transition shadow-sm">
+                        <button
+                          onClick={() => deleteEmployee(e.id)}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 font-extrabold text-xs transition shadow-sm"
+                        >
                           <FiTrash2 /> Delete
                         </button>
                       </div>
@@ -686,14 +537,16 @@ export default function EmployeeTable() {
 
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center py-12 text-gray-500 font-semibold">No employees found.</td>
+                    <td colSpan={5} className="text-center py-16 text-gray-400 font-semibold">
+                      <FiUser size={36} className="mx-auto mb-3 opacity-30" />
+                      No employees found.
+                    </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
@@ -702,81 +555,328 @@ export default function EmployeeTable() {
             pageSize={PAGE_SIZE}
           />
         </div>
+      </div>
 
-        {selectedEmployee && (
-          <FeedbackModal employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} />
-        )}
+      {/* =====================
+          ADD / EDIT MODAL
+      ===================== */}
+      {showFormModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={closeFormModal}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl relative max-h-[92vh] overflow-y-auto border border-white/60"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 px-7 py-6 rounded-t-3xl flex items-center justify-between sticky top-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center">
+                  {editing ? <FiEdit2 size={18} className="text-white" /> : <FiPlus size={18} className="text-white" />}
+                </div>
+                <div>
+                  <h2 className="text-lg font-extrabold text-white">
+                    {editing ? "Edit Employee" : "Add New Employee"}
+                  </h2>
+                  <p className="text-indigo-200 text-xs font-semibold">
+                    {editing ? "Update editable fields below. Name is locked after creation." : "Fill in all required fields to register a new employee."}
+                  </p>
+                </div>
+              </div>
+              <button onClick={closeFormModal} className="text-white/80 hover:text-white rounded-full p-2 hover:bg-white/10 transition">
+                <FiXCircle size={24} />
+              </button>
+            </div>
 
-        {/* View Employee Feedback Modal */}
-        {showFeedbackModal && selectedEmployeeForFeedback && (
-          <div className="fixed inset-0 z-70 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
-            onClick={() => setShowFeedbackModal(false)}>
-            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}>
-              <div className="px-6 py-5 flex items-center justify-between bg-linear-to-r from-indigo-600 to-purple-600 shrink-0">
-                <div className="flex items-center gap-3 text-white">
-                  <div className="bg-white/20 p-2.5 rounded-xl"><FiStar size={20} /></div>
-                  <div>
-                    <h3 className="text-lg font-extrabold">Employee Feedback</h3>
-                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">{getFullName(selectedEmployeeForFeedback)}</p>
+            {/* Modal Body */}
+            <div className="p-7 space-y-6">
+
+              {/* Section: Name */}
+              <div>
+                <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-2">
+                  <span className="inline-block w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-extrabold">1</span>
+                  Personal Information
+                </p>
+                <div className="grid grid-cols-12 gap-3">
+                  {/* First Name */}
+                  <div className="col-span-12 sm:col-span-4">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
+                      First Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      placeholder="e.g., Maria"
+                      value={form.firstName}
+                      disabled={!!editing}
+                      onChange={(e) => { setForm({ ...form, firstName: e.target.value }); setFormErrors((p) => ({ ...p, firstName: undefined })); }}
+                      className={`w-full border rounded-xl px-4 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
+                        ${editing ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-100" : "bg-white border-gray-200"}
+                        ${formErrors.firstName ? "border-red-400" : ""}`}
+                    />
+                    {formErrors.firstName && <p className="text-xs text-red-500 mt-1">{formErrors.firstName}</p>}
+                  </div>
+
+                  {/* Middle Name */}
+                  <div className="col-span-12 sm:col-span-3">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
+                      Middle Name
+                    </label>
+                    <input
+                      placeholder="e.g., Fuentes"
+                      value={form.middleName}
+                      disabled={!!editing}
+                      onChange={(e) => setForm({ ...form, middleName: e.target.value })}
+                      className={`w-full border rounded-xl px-4 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
+                        ${editing ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-100" : "bg-white border-gray-200"}`}
+                    />
+                  </div>
+
+                  {/* Last Name */}
+                  <div className="col-span-12 sm:col-span-4">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
+                      Last Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      placeholder="e.g., Santos"
+                      value={form.lastName}
+                      disabled={!!editing}
+                      onChange={(e) => { setForm({ ...form, lastName: e.target.value }); setFormErrors((p) => ({ ...p, lastName: undefined })); }}
+                      className={`w-full border rounded-xl px-4 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
+                        ${editing ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-100" : "bg-white border-gray-200"}
+                        ${formErrors.lastName ? "border-red-400" : ""}`}
+                    />
+                    {formErrors.lastName && <p className="text-xs text-red-500 mt-1">{formErrors.lastName}</p>}
+                  </div>
+
+                  {/* Suffix */}
+                  <div className="col-span-12 sm:col-span-1">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
+                      Suffix
+                    </label>
+                    <input
+                      placeholder="Jr."
+                      value={form.suffix}
+                      disabled={!!editing}
+                      onChange={(e) => setForm({ ...form, suffix: e.target.value })}
+                      className={`w-full border rounded-xl px-3 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-center
+                        ${editing ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-100" : "bg-white border-gray-200"}`}
+                    />
                   </div>
                 </div>
-                <button className="text-white/80 hover:text-white hover:bg-white/15 rounded-full p-2 transition"
-                  onClick={() => setShowFeedbackModal(false)}>✕</button>
+
+                {editing && (
+                  <p className="mt-2 text-xs text-amber-600 font-semibold flex items-center gap-1">
+                    ⚠️ Name fields are locked after creation.
+                  </p>
+                )}
               </div>
-              <div className="p-6 overflow-y-auto space-y-4 flex-1">
-                {selectedEmployeeForFeedback.feedbacks && selectedEmployeeForFeedback.feedbacks.length > 0 ? (
-                  <>
-                    <div className="rounded-xl bg-linear-to-br from-indigo-50 to-purple-50 p-5 border border-indigo-100">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider mb-2">Average Rating</p>
-                          <p className="text-3xl font-extrabold text-indigo-900">{selectedEmployeeForFeedback.rating?.toFixed(1) || "—"}</p>
-                          <p className="text-sm font-semibold text-indigo-600 mt-1">{ratingLabel(selectedEmployeeForFeedback.rating)}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider mb-2">Total Feedback</p>
-                          <p className="text-3xl font-extrabold text-indigo-900">{selectedEmployeeForFeedback.feedbacks.length}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      {selectedEmployeeForFeedback.feedbacks.map((fb, idx) => (
-                        <div key={fb.id || idx} className="rounded-xl border border-gray-200 bg-slate-50 p-4">
-                          <div className="mb-3 pb-3 border-b border-gray-200">
-                            <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1">Complaint</p>
-                            <p className="text-sm text-gray-700 font-semibold">Anonymous Citizen - {fb.complaint || "—"}</p>
-                          </div>
-                          {fb.comment && (
-                            <div className="mb-3 pb-3 border-b border-gray-200">
-                              <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-1">Feedback</p>
-                              <p className="text-sm text-gray-700">{fb.comment}</p>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between">
-                            <div className="flex gap-1">
-                              {[1,2,3,4,5].map((n) => (
-                                <FiStar key={n} size={16}
-                                  className={n <= (fb.rating || 0) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"} />
-                              ))}
-                            </div>
-                            <p className="text-sm font-bold text-indigo-600">{fb.rating || 0}/5</p>
-                          </div>
-                        </div>
+
+              {/* Section: Position & Contact */}
+              <div>
+                <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-2">
+                  <span className="inline-block w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-extrabold">2</span>
+                  Position & Contact
+                </p>
+                <div className="grid grid-cols-12 gap-3">
+                  {/* Position */}
+                  <div className="col-span-12 sm:col-span-4">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Position</label>
+                    <select
+                      value={form.position}
+                      onChange={(e) => setForm({ ...form, position: e.target.value })}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-semibold"
+                    >
+                      {positionOptions.filter((p) => p !== "All Positions").map((p) => (
+                        <option key={p} value={p}>{p}</option>
                       ))}
+                    </select>
+                  </div>
+
+                  {/* Phone */}
+                  <div className="col-span-12 sm:col-span-4">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Phone Number</label>
+                    <input
+                      type="tel"
+                      placeholder="e.g., 09123456789"
+                      value={form.number}
+                      onChange={(e) => setForm({ ...form, number: e.target.value })}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    />
+                  </div>
+
+                  {/* Purok */}
+                  <div className="col-span-12 sm:col-span-2">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Purok</label>
+                    <select
+                      value={form.purok}
+                      onChange={(e) => setForm({ ...form, purok: e.target.value })}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    >
+                      <option value="">Select</option>
+                      {["1", "2", "3", "4", "5", "6"].map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Address */}
+                  <div className="col-span-12 sm:col-span-2">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Address</label>
+                    <input
+                      placeholder="lot/block/street"
+                      value={form.address}
+                      onChange={(e) => setForm({ ...form, address: e.target.value })}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Account Credentials (Add only) */}
+              {!editing && (
+                <div>
+                  <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-2">
+                    <span className="inline-block w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-extrabold">3</span>
+                    Account Credentials
+                  </p>
+                  <div className="grid grid-cols-12 gap-3">
+                    {/* Email */}
+                    <div className="col-span-12 sm:col-span-6">
+                      <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
+                        Email <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        name="new-email-field"
+                        autoComplete="new-email"
+                        placeholder="e.g., maria@example.com"
+                        value={form.email}
+                        onChange={(e) => { setForm({ ...form, email: e.target.value }); setFormErrors((p) => ({ ...p, email: undefined })); }}
+                        className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${formErrors.email ? "border-red-400" : "border-gray-200"}`}
+                      />
+                      {formErrors.email && <p className="text-xs text-red-500 mt-1">{formErrors.email}</p>}
                     </div>
+
+                    {/* Password */}
+                    <div className="col-span-12 sm:col-span-6">
+                      <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
+                        Password <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          name="new-password-field"
+                          autoComplete="new-password"
+                          placeholder="Min. 6 characters"
+                          value={form.password}
+                          onChange={(e) => { setForm({ ...form, password: e.target.value }); setFormErrors((p) => ({ ...p, password: undefined })); }}
+                          className={`w-full border rounded-xl px-4 py-2.5 pr-10 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${formErrors.password ? "border-red-400" : "border-gray-200"}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                        >
+                          {showPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
+                        </button>
+                      </div>
+                      {formErrors.password && <p className="text-xs text-red-500 mt-1">{formErrors.password}</p>}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
+                {editing ? (
+                  <>
+                    <button
+                      onClick={saveEdit}
+                      className="flex-1 inline-flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-3 rounded-xl font-extrabold hover:bg-indigo-700 transition shadow-md text-sm"
+                    >
+                      <FiEdit2 size={15} /> Save Changes
+                    </button>
+                    <button
+                      onClick={closeFormModal}
+                      className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-100 text-slate-700 px-5 py-3 rounded-xl font-extrabold hover:bg-slate-200 transition text-sm"
+                    >
+                      <FiXCircle size={15} /> Cancel
+                    </button>
                   </>
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-12">
-                    <div className="rounded-full bg-gray-100 p-4 mb-3"><FiStar size={32} className="text-gray-400" /></div>
-                    <p className="text-gray-500 font-semibold">No feedback yet</p>
-                  </div>
+                  <>
+                    <button
+                      onClick={handleAddClick}
+                      disabled={creating}
+                      className={`flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-extrabold transition shadow-md text-sm ${
+                        creating ? "bg-gray-400 text-white cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                      }`}
+                    >
+                      {creating ? (
+                        <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Creating...</>
+                      ) : (
+                        <><FiPlus size={15} /> Add Employee</>
+                      )}
+                    </button>
+                    <button
+                      onClick={closeFormModal}
+                      className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-100 text-slate-700 px-5 py-3 rounded-xl font-extrabold hover:bg-slate-200 transition text-sm"
+                    >
+                      <FiXCircle size={15} /> Cancel
+                    </button>
+                  </>
                 )}
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4 border border-white/60">
+            <h3 className="text-lg font-extrabold text-gray-900 mb-2">Confirm Employee Creation</h3>
+            <p className="text-sm text-gray-500 font-semibold mb-4">Please review the login credentials before confirming.</p>
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-5 space-y-1">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-600 mb-2">Login Username</p>
+              <p className="text-sm font-extrabold text-indigo-900">{form.email}</p>
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-600 mt-3 mb-1">Full Name</p>
+              <p className="text-sm font-extrabold text-indigo-900">
+                {[form.firstName, form.middleName, form.lastName, form.suffix].filter(Boolean).join(" ")}
+              </p>
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-600 mt-3 mb-1">Position</p>
+              <p className="text-sm font-extrabold text-indigo-900">{form.position}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowConfirm(false)}
+                className="flex-1 px-5 py-2.5 rounded-xl font-extrabold bg-slate-100 text-slate-800 hover:bg-slate-200 transition text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createEmployee}
+                disabled={creating}
+                className={`flex-1 px-5 py-2.5 rounded-xl font-extrabold transition shadow-md text-sm ${
+                  creating ? "bg-gray-400 text-white cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                }`}
+              >
+                {creating ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Creating...
+                  </span>
+                ) : "Confirm & Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Modal */}
+      {selectedEmployee && (
+        <FeedbackModal employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} />
+      )}
     </div>
   );
 }
@@ -790,7 +890,6 @@ function StatCard({ title, value, tone = "indigo" }) {
     slate:   { ring: "ring-slate-200",   icon: "bg-slate-600",   glow: "bg-slate-500/15"   },
   };
   const t = tones[tone] || tones.indigo;
-
   return (
     <div className="relative overflow-hidden rounded-2xl border border-white/60 bg-white/80 backdrop-blur shadow-xl">
       <div className={`absolute -top-20 -right-20 w-56 h-56 rounded-full blur-3xl ${t.glow}`} />
@@ -811,10 +910,12 @@ function StatCard({ title, value, tone = "indigo" }) {
 
 function ChipButton({ active, onClick, label }) {
   return (
-    <button onClick={onClick}
+    <button
+      onClick={onClick}
       className={`px-4 py-2 rounded-xl text-xs font-extrabold transition border ${
         active ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-      }`}>
+      }`}
+    >
       {label}
     </button>
   );
@@ -841,7 +942,6 @@ function FeedbackModal({ employee, onClose }) {
   const avgRating = employee.rating ?? 0;
   const badge = getPerformanceBadge(avgRating);
   const feedbacks = employee.feedbacks || [];
-
   const sorted = [...feedbacks].sort((a, b) => {
     const ta = a.timestamp?.seconds ?? a.timestamp ?? 0;
     const tb = b.timestamp?.seconds ?? b.timestamp ?? 0;
@@ -860,17 +960,17 @@ function FeedbackModal({ employee, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl relative max-h-[90vh] overflow-hidden border border-white/60"
-        onClick={(ev) => ev.stopPropagation()}>
-        {/* Modal Header */}
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl relative max-h-[90vh] overflow-hidden border border-white/60"
+        onClick={(ev) => ev.stopPropagation()}
+      >
+        {/* Header */}
         <div className="relative overflow-hidden bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 p-6 md:p-7">
           <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
           <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
-
           <button onClick={onClose} className="absolute top-4 right-4 text-white/90 hover:text-white rounded-full p-2 hover:bg-white/10 transition">
             <FiXCircle size={26} />
           </button>
-
           <div className="relative flex flex-col md:flex-row md:items-start md:justify-between gap-5">
             <div className="flex items-start gap-4">
               <div className="relative bg-white/15 backdrop-blur-sm rounded-2xl border border-white/20 w-24 h-24 flex items-center justify-center overflow-hidden shrink-0">
@@ -880,11 +980,9 @@ function FeedbackModal({ employee, onClose }) {
                   <FiUser className="text-white" size={38} />
                 )}
               </div>
-
               <div className="min-w-0">
                 <h2 className="text-2xl font-extrabold text-white truncate">{fullName}</h2>
                 <p className="text-indigo-100 text-sm font-semibold mt-1">{employee.position}</p>
-
                 <div className="mt-4 inline-flex items-center gap-3 bg-white/15 border border-white/20 rounded-2xl px-4 py-3">
                   <div>
                     <p className="text-white/80 text-[11px] font-extrabold uppercase tracking-wider">Average Rating</p>
@@ -899,7 +997,6 @@ function FeedbackModal({ employee, onClose }) {
                     <p className="text-2xl font-extrabold text-white mt-1">{feedbacks.length}</p>
                   </div>
                 </div>
-
                 {avgRating > 0 && (
                   <div className="mt-3">
                     <span className={`${badge.cls} text-white text-xs font-extrabold px-3 py-1.5 rounded-full`}>{badge.text}</span>
@@ -910,7 +1007,7 @@ function FeedbackModal({ employee, onClose }) {
           </div>
         </div>
 
-        {/* Modal Body */}
+        {/* Body */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-220px)] bg-linear-to-b from-white to-slate-50">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
@@ -918,7 +1015,6 @@ function FeedbackModal({ employee, onClose }) {
             </h3>
             {sorted.length > 0 && <span className="text-xs font-semibold text-gray-500">Sorted: newest first</span>}
           </div>
-
           <div className="space-y-4">
             {sorted.length > 0 ? sorted.map((f) => (
               <div key={f.id} className="bg-white rounded-2xl p-5 shadow-md border border-gray-200 hover:shadow-xl transition">
@@ -953,7 +1049,6 @@ function FeedbackModal({ employee, onClose }) {
               </div>
             )}
           </div>
-
           {sorted.length > 0 && (
             <div className="mt-6 text-xs text-gray-500 font-semibold">Tip: Click outside the modal to close.</div>
           )}
