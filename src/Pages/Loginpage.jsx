@@ -333,7 +333,7 @@ const LoginView = ({ onForgot }) => {
           </>
         ) : (
           <>
-            <Shield size={15} />
+            
             Sign in to Portal
           </>
         )}
@@ -516,7 +516,7 @@ const ForgotPasswordView = ({ onBack }) => {
           </>
         ) : (
           <>
-            <Sparkles size={14} />
+            
             Send reset link
           </>
         )}
@@ -631,7 +631,7 @@ const Talk2KapAuth = () => {
           )}
 
           <p className="text-center text-xs text-gray-300 mt-6" style={{ color: "#d1d5db" }}>
-            © {new Date().getFullYear()} Talk2Kap · Municipality of San Roque
+            © {new Date().getFullYear()} Talk2Kap · Municipality of Victoria, Brgy. San Roque
           </p>
         </div>
       </div>
