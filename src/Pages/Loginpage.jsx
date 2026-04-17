@@ -457,7 +457,7 @@ const Talk2KapAuth = () => {
           backgroundImage: `url(${sanroqueLogo})`,
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
-          backgroundSize: "50%",
+          backgroundSize: "70%",
           opacity: 0.08,
         }}
       />
