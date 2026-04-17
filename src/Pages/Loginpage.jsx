@@ -1,7 +1,5 @@
 // Talk2KapAuth.jsx - Admin Auth with Firebase + Forgot Password
 import React, { useEffect, useState } from "react";
-import barangayLogo from "../../assets/sanroquelogo.png";
-
 import {
   Eye,
   EyeOff,
@@ -455,7 +453,7 @@ const Talk2KapAuth = () => {
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
-          backgroundImage: `url(${barangayLogo})`,
+          backgroundImage: 'url("/src/assets/sanroquelogo.png")',
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
           backgroundSize: "50%",
