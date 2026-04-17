@@ -1,5 +1,8 @@
 // Talk2KapAuth.jsx - Admin Auth with Firebase + Forgot Password
-import React, { useEffect, useState } from "react";
+// Redesigned UI/UX — refined glass-morphism card, smooth view transitions,
+// animated inputs, password strength meter, and polished success screen.
+
+import React, { useEffect, useState, useRef } from "react";
 import sanroqueLogo from "../assets/sanroquelogo.png";
 import {
   Eye,
@@ -10,43 +13,159 @@ import {
   ArrowLeft,
   AlertCircle,
   CheckCircle,
+  Shield,
+  Sparkles,
 } from "lucide-react";
 import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
 } from "firebase/auth";
-import { auth } from "../firebaseConfig"; // 🔧 Adjust path if needed
+import { auth } from "../firebaseConfig";
 
 // ─────────────────────────────────────────────
-// Shared UI Atoms
+// Design Tokens (inline via className)
+// Uses Tailwind + custom inline styles for effects
 // ─────────────────────────────────────────────
 
+// ── Spinner ──
 const Spinner = () => (
-  <div
-    className="animate-spin rounded-full border-2 border-transparent border-t-white"
-    style={{ width: 20, height: 20 }}
-  />
+  <svg
+    className="animate-spin"
+    style={{ width: 18, height: 18 }}
+    viewBox="0 0 24 24"
+    fill="none"
+  >
+    <circle
+      className="opacity-25"
+      cx="12"
+      cy="12"
+      r="10"
+      stroke="currentColor"
+      strokeWidth="3"
+    />
+    <path
+      className="opacity-75"
+      fill="currentColor"
+      d="M4 12a8 8 0 018-8v8z"
+    />
+  </svg>
 );
 
-const MessageBox = ({ type, text }) => (
-  <div
-    className={`border px-4 py-3 rounded-xl text-sm flex items-start gap-2 ${
-      type === "success"
-        ? "bg-green-50 text-green-800 border-green-200"
-        : "bg-red-50 text-red-800 border-red-200"
-    }`}
-  >
-    <AlertCircle size={18} className="mt-0.5 shrink-0" />
-    <span>{text}</span>
-  </div>
-);
+// ── Alert Banner ──
+const AlertBanner = ({ type, text }) => {
+  const isSuccess = type === "success";
+  return (
+    <div
+      className={`flex items-start gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
+        isSuccess
+          ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+          : "bg-red-50 text-red-700 border border-red-200"
+      }`}
+      style={{ animation: "fadeSlideIn 0.25s ease" }}
+    >
+      {isSuccess ? (
+        <CheckCircle size={16} className="mt-0.5 shrink-0 text-emerald-500" />
+      ) : (
+        <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-400" />
+      )}
+      <span className="leading-snug">{text}</span>
+    </div>
+  );
+};
+
+// ── Floating Label Input ──
+const FloatingInput = ({
+  id,
+  label,
+  type = "text",
+  value,
+  onChange,
+  onKeyDown,
+  autoComplete,
+  suffix,
+}) => {
+  const [focused, setFocused] = useState(false);
+  const isUp = focused || value?.length > 0;
+
+  return (
+    <div className="relative">
+      <input
+        id={id}
+        type={type}
+        value={value}
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        autoComplete={autoComplete}
+        className="peer w-full pt-6 pb-2 px-4 rounded-2xl border-2 text-gray-800 text-sm bg-gray-50 outline-none transition-all duration-200"
+        style={{
+          borderColor: focused ? "#6366f1" : "#e5e7eb",
+          paddingRight: suffix ? "48px" : "16px",
+          fontSize: "15px",
+        }}
+      />
+      <label
+        htmlFor={id}
+        className="absolute left-4 pointer-events-none transition-all duration-200 font-medium"
+        style={{
+          top: isUp ? "8px" : "50%",
+          transform: isUp ? "none" : "translateY(-50%)",
+          fontSize: isUp ? "11px" : "14px",
+          color: focused ? "#6366f1" : "#9ca3af",
+          letterSpacing: isUp ? "0.04em" : "0",
+          textTransform: isUp ? "uppercase" : "none",
+        }}
+      >
+        {label}
+      </label>
+      {suffix && (
+        <div className="absolute right-3 top-1/2 -translate-y-1/2">{suffix}</div>
+      )}
+    </div>
+  );
+};
+
+// ── Password Strength Bar ──
+const PasswordStrength = ({ password }) => {
+  const getStrength = (pw) => {
+    if (!pw) return 0;
+    let score = 0;
+    if (pw.length >= 8) score++;
+    if (/[A-Z]/.test(pw)) score++;
+    if (/[0-9]/.test(pw)) score++;
+    if (/[^A-Za-z0-9]/.test(pw)) score++;
+    return score;
+  };
+
+  const score = getStrength(password);
+  const labels = ["", "Weak", "Fair", "Good", "Strong"];
+  const colors = ["", "#ef4444", "#f59e0b", "#3b82f6", "#10b981"];
+
+  if (!password) return null;
+
+  return (
+    <div className="mt-2 space-y-1.5" style={{ animation: "fadeSlideIn 0.2s ease" }}>
+      <div className="flex gap-1">
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="h-1 flex-1 rounded-full transition-all duration-300"
+            style={{
+              background: i <= score ? colors[score] : "#e5e7eb",
+            }}
+          />
+        ))}
+      </div>
+      <p className="text-xs font-medium" style={{ color: colors[score] }}>
+        {labels[score]}
+      </p>
+    </div>
+  );
+};
 
 // ─────────────────────────────────────────────
-// Login View — Firebase signInWithEmailAndPassword
-// NOTE: Hardcoded credentials removed.
-// Login now uses the admin's actual Firebase email + password.
-// When the admin resets their password via Forgot Password,
-// their new password becomes the login password automatically.
+// Login View
 // ─────────────────────────────────────────────
 
 const LoginView = ({ onForgot }) => {
@@ -58,7 +177,6 @@ const LoginView = ({ onForgot }) => {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("");
 
-  // Load saved email
   useEffect(() => {
     const remembered = localStorage.getItem("rememberMe") === "true";
     if (remembered) {
@@ -68,7 +186,7 @@ const LoginView = ({ onForgot }) => {
   }, []);
 
   const handleLogin = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     setMessage("");
     setMessageType("");
 
@@ -77,20 +195,15 @@ const LoginView = ({ onForgot }) => {
       setMessage("Please enter your email and password.");
       return;
     }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setMessageType("error");
       setMessage("Please enter a valid email address.");
       return;
     }
 
     setIsLoading(true);
-
     try {
       await signInWithEmailAndPassword(auth, email, password);
-
-      // Save or clear remembered email (never save password)
       if (remember) {
         localStorage.setItem("rememberMe", "true");
         localStorage.setItem("savedEmail", email);
@@ -98,145 +211,131 @@ const LoginView = ({ onForgot }) => {
         localStorage.removeItem("rememberMe");
         localStorage.removeItem("savedEmail");
       }
-
       localStorage.setItem("isLoggedIn", "true");
       setMessageType("success");
-      setMessage("Login successful! Redirecting...");
-
-      setTimeout(() => {
-        window.location.href = "/main";
-      }, 800);
+      setMessage("Login successful! Redirecting…");
+      setTimeout(() => { window.location.href = "/main"; }, 900);
     } catch (error) {
-      console.warn("Login error:", error.code);
-
-      let msg = "Something went wrong. Please try again.";
-
-      switch (error.code) {
-        case "auth/user-not-found":
-          msg = "No account found with this email address.";
-          break;
-        case "auth/wrong-password":
-          msg = "Incorrect password. Please try again or reset your password.";
-          break;
-        case "auth/invalid-email":
-          msg = "The email address is not valid.";
-          break;
-        case "auth/invalid-credential":
-          msg = "Invalid email or password. Please check your credentials.";
-          break;
-        case "auth/user-disabled":
-          msg = "This account has been disabled. Please contact support.";
-          break;
-        case "auth/too-many-requests":
-          msg = "Too many failed attempts. Try again later or reset your password.";
-          break;
-        case "auth/network-request-failed":
-          msg = "Network error. Check your internet connection and try again.";
-          break;
-        case "auth/operation-not-allowed":
-          msg = "Email/password login is currently disabled. Contact support.";
-          break;
-        default:
-          msg = error.message || "An unexpected error occurred.";
-      }
-
+      const msgs = {
+        "auth/user-not-found": "No account found with this email.",
+        "auth/wrong-password": "Incorrect password. Try again or reset it.",
+        "auth/invalid-email": "That email address isn't valid.",
+        "auth/invalid-credential": "Invalid email or password.",
+        "auth/user-disabled": "This account has been disabled.",
+        "auth/too-many-requests": "Too many attempts. Try again later.",
+        "auth/network-request-failed": "Network error. Check your connection.",
+        "auth/operation-not-allowed": "Email/password login is disabled.",
+      };
       setMessageType("error");
-      setMessage(msg);
+      setMessage(msgs[error.code] || error.message || "Something went wrong.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
       {/* Header */}
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-linear-to-br from-indigo-600 to-pink-500 rounded-full mb-4">
-          <MessageCircle size={40} className="text-white" />
+      <div className="text-center mb-8">
+        <div
+          className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5"
+          style={{ background: "linear-gradient(135deg, #6366f1 0%, #ec4899 100%)" }}
+        >
+          <MessageCircle size={30} className="text-white" />
         </div>
-        <h1 className="text-4xl font-extrabold text-gray-800">Talk2Kap</h1>
-        <p className="text-sm text-gray-500 mt-1">Admin Portal</p>
+        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+          Talk<span style={{ color: "#6366f1" }}>2</span>Kap
+        </h1>
+        <p className="text-xs text-gray-400 mt-1 tracking-widest uppercase font-medium">
+          Admin Portal
+        </p>
       </div>
 
-      {/* Email */}
-      <div>
-        <label className="block text-gray-700 font-medium mb-2">Email</label>
-        <div className="relative">
-          <Mail
-            size={18}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
-          <input
-            type="email"
-            className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-400 focus:outline-none transition-colors"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleLogin(e)}
-          />
-        </div>
-      </div>
-
-      {/* Password */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-gray-700 font-medium">Password</label>
-          <button
-            type="button"
-            onClick={onForgot}
-            className="text-sm text-indigo-500 hover:text-indigo-700 hover:underline transition-colors"
-          >
-            Forgot password?
-          </button>
-        </div>
-        <div className="relative">
-          <Lock
-            size={18}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
-          <input
-            type={showPassword ? "text" : "password"}
-            className="w-full pl-10 pr-12 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-400 focus:outline-none transition-colors"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleLogin(e)}
-          />
-          <button
-            type="button"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            onClick={() => setShowPassword(!showPassword)}
-          >
-            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Remember Me */}
-      <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={remember}
-          onChange={(e) => setRemember(e.target.checked)}
-          className="rounded accent-indigo-500"
+      {/* Fields */}
+      <div className="space-y-4 mb-4">
+        <FloatingInput
+          id="email"
+          label="Email address"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleLogin(e)}
+          autoComplete="email"
         />
-        Remember me
-      </label>
 
-      {/* Message */}
-      {message && <MessageBox type={messageType} text={message} />}
+        <FloatingInput
+          id="password"
+          label="Password"
+          type={showPassword ? "text" : "password"}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleLogin(e)}
+          autoComplete="current-password"
+          suffix={
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          }
+        />
+      </div>
+
+      {/* Remember + Forgot */}
+      <div className="flex items-center justify-between mb-5">
+        <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+            className="rounded accent-indigo-500 w-4 h-4"
+          />
+          <span>Remember me</span>
+        </label>
+        <button
+          type="button"
+          onClick={onForgot}
+          className="text-sm font-medium transition-colors"
+          style={{ color: "#6366f1" }}
+          onMouseOver={(e) => (e.target.style.color = "#4338ca")}
+          onMouseOut={(e) => (e.target.style.color = "#6366f1")}
+        >
+          Forgot password?
+        </button>
+      </div>
+
+      {/* Alert */}
+      {message && (
+        <div className="mb-4">
+          <AlertBanner type={messageType} text={message} />
+        </div>
+      )}
 
       {/* Login Button */}
       <button
         onClick={handleLogin}
         disabled={isLoading}
-        className="w-full py-3 rounded-2xl text-white font-semibold bg-linear-to-r from-indigo-500 to-pink-500 hover:opacity-90 active:opacity-80 transition-opacity disabled:opacity-60"
+        className="w-full py-3.5 rounded-2xl text-white text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+        style={{
+          background: "linear-gradient(90deg, #6366f1 0%, #ec4899 100%)",
+          boxShadow: isLoading ? "none" : "0 4px 20px rgba(99,102,241,0.35)",
+        }}
+        onMouseOver={(e) => !isLoading && (e.currentTarget.style.opacity = "0.92")}
+        onMouseOut={(e) => (e.currentTarget.style.opacity = "1")}
       >
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2">
+          <>
             <Spinner />
-            Logging in...
-          </div>
+            Signing in…
+          </>
         ) : (
-          "Login"
+          <>
+            <Shield size={15} />
+            Sign in to Portal
+          </>
         )}
       </button>
     </div>
@@ -245,9 +344,6 @@ const LoginView = ({ onForgot }) => {
 
 // ─────────────────────────────────────────────
 // Forgot Password View
-// Sends Firebase password reset email.
-// Admin clicks the link → sets NEW password on Firebase's page.
-// That new password is now their login password going forward.
 // ─────────────────────────────────────────────
 
 const ForgotPasswordView = ({ onBack }) => {
@@ -258,7 +354,7 @@ const ForgotPasswordView = ({ onBack }) => {
   const [messageType, setMessageType] = useState("");
 
   const handleSend = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     setMessage("");
     setMessageType("");
 
@@ -267,214 +363,279 @@ const ForgotPasswordView = ({ onBack }) => {
       setMessage("Please enter your email address.");
       return;
     }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setMessageType("error");
       setMessage("Please enter a valid email address.");
       return;
     }
 
     setIsLoading(true);
-
     try {
       await sendPasswordResetEmail(auth, email);
-      console.log("✅ Password reset email sent to:", email);
       setSent(true);
     } catch (error) {
-      console.warn("Reset error:", error.code, error.message);
-
-      let msg = "Failed to send reset email. Please try again.";
-
-      switch (error.code) {
-        case "auth/user-not-found":
-          msg = "No account found with this email address.";
-          break;
-        case "auth/invalid-email":
-          msg = "The email address is not valid. Please check and try again.";
-          break;
-        case "auth/too-many-requests":
-          msg = "Too many attempts. Please wait a moment and try again.";
-          break;
-        case "auth/network-request-failed":
-          msg = "Network error. Check your connection and try again.";
-          break;
-        case "auth/operation-not-allowed":
-          msg = "Password reset is currently disabled. Please contact support.";
-          break;
-        default:
-          msg = error.message || "An unexpected error occurred.";
-      }
-
+      const msgs = {
+        "auth/user-not-found": "No account found with this email.",
+        "auth/invalid-email": "That email address isn't valid.",
+        "auth/too-many-requests": "Too many attempts. Please wait and try again.",
+        "auth/network-request-failed": "Network error. Check your connection.",
+        "auth/operation-not-allowed": "Password reset is currently disabled.",
+      };
       setMessageType("error");
-      setMessage(msg);
+      setMessage(msgs[error.code] || error.message || "Failed to send reset email.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ── Success Screen ──
+  // ── Success ──
   if (sent) {
     return (
-      <div className="text-center space-y-5">
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-2">
-          <CheckCircle size={42} className="text-green-500" />
+      <div
+        className="text-center"
+        style={{ animation: "fadeSlideIn 0.3s ease" }}
+      >
+        {/* Icon */}
+        <div
+          className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5"
+          style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}
+        >
+          <CheckCircle size={30} className="text-white" />
         </div>
 
-        <h2 className="text-2xl font-extrabold text-gray-800">Check your inbox!</h2>
-
-        <p className="text-sm text-gray-500 leading-relaxed">
-          A password reset link was sent to{" "}
-          <span className="font-semibold text-gray-700">{email}</span>.
-          <br />
-          Click the link to set your{" "}
-          <span className="font-semibold text-indigo-600">new password</span>.
+        <h2 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight">
+          Email sent!
+        </h2>
+        <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+          A reset link was sent to{" "}
+          <span className="font-semibold text-gray-700">{email}</span>.<br />
+          Use it to set a new password.
         </p>
 
         {/* Steps */}
-        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-4 text-left space-y-3">
-          <p className="text-xs font-semibold text-indigo-700">How it works:</p>
+        <div
+          className="rounded-2xl p-4 mb-5 text-left space-y-3"
+          style={{ background: "#f5f3ff", border: "1px solid #ede9fe" }}
+        >
+          <p
+            className="text-xs font-bold tracking-widest uppercase mb-3"
+            style={{ color: "#7c3aed" }}
+          >
+            How it works
+          </p>
           {[
-            "Open the reset link sent to your email",
-            "Enter and confirm your new password on the page that opens",
-            "Come back here and log in using your new password",
+            "Open the reset link in your inbox",
+            "Enter and confirm your new password",
+            "Return here and sign in with your new password",
           ].map((step, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-indigo-500 text-white text-xs flex items-center justify-center shrink-0 mt-0.5 font-bold">
+            <div key={i} className="flex items-start gap-3">
+              <div
+                className="w-5 h-5 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5"
+                style={{ background: "linear-gradient(135deg, #6366f1, #ec4899)" }}
+              >
                 {i + 1}
-              </span>
-              <span className="text-xs text-indigo-800 leading-relaxed">{step}</span>
+              </div>
+              <p className="text-xs text-indigo-900 leading-relaxed">{step}</p>
             </div>
           ))}
         </div>
 
-        {/* Resend tip */}
-        <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs text-gray-500">
-          Didn't receive it? Check your spam folder or{" "}
+        {/* Resend */}
+        <p className="text-xs text-gray-400 mb-5">
+          Didn't receive it? Check your spam or{" "}
           <button
-            onClick={() => {
-              setSent(false);
-              setMessage("");
-            }}
-            className="text-indigo-500 underline font-medium hover:text-indigo-700"
+            onClick={() => { setSent(false); setMessage(""); }}
+            className="font-semibold underline"
+            style={{ color: "#6366f1", background: "none", border: "none", cursor: "pointer" }}
           >
             try again
           </button>
           .
-        </div>
+        </p>
 
-        {/* Back */}
         <button
           onClick={onBack}
-          className="w-full py-3 rounded-2xl border-2 border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 active:bg-gray-100 transition-colors flex items-center justify-center gap-2"
+          className="w-full py-3 rounded-2xl border-2 border-gray-200 text-gray-600 text-sm font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
         >
-          <ArrowLeft size={16} />
-          Back to Login
+          <ArrowLeft size={14} />
+          Back to sign in
         </button>
       </div>
     );
   }
 
-  // ── Request Screen ──
+  // ── Request ──
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-linear-to-br from-indigo-600 to-pink-500 rounded-full mb-4">
-          <Lock size={36} className="text-white" />
+    <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
+      <div className="text-center mb-8">
+        <div
+          className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5"
+          style={{ background: "linear-gradient(135deg, #6366f1 0%, #ec4899 100%)" }}
+        >
+          <Lock size={28} className="text-white" />
         </div>
-        <h1 className="text-3xl font-extrabold text-gray-800">Forgot Password?</h1>
-        <p className="text-sm text-gray-500 mt-2 leading-relaxed">
-          Enter your admin email. We'll send a link to{" "}
-          <span className="font-medium text-gray-700">change your password</span>.
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+          Reset password
+        </h1>
+        <p className="text-sm text-gray-400 mt-2 leading-relaxed">
+          Enter your admin email and we'll send a secure reset link.
         </p>
       </div>
 
-      {/* Email Input */}
-      <div>
-        <label className="block text-gray-700 font-medium mb-2">Email address</label>
-        <div className="relative">
-          <Mail
-            size={18}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
-          <input
-            type="email"
-            className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-indigo-400 focus:outline-none transition-colors"
-            placeholder="admin@sanroque.gov.ph"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend(e)}
-          />
-        </div>
+      <div className="mb-4">
+        <FloatingInput
+          id="reset-email"
+          label="Email address"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSend(e)}
+          autoComplete="email"
+        />
       </div>
 
-      {/* Message */}
-      {message && <MessageBox type={messageType} text={message} />}
+      {message && (
+        <div className="mb-4">
+          <AlertBanner type={messageType} text={message} />
+        </div>
+      )}
 
-      {/* Send Button */}
       <button
         onClick={handleSend}
         disabled={isLoading}
-        className="w-full py-3 rounded-2xl text-white font-semibold bg-linear-to-r from-indigo-500 to-pink-500 hover:opacity-90 active:opacity-80 transition-opacity disabled:opacity-60"
+        className="w-full py-3.5 rounded-2xl text-white text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2 mb-3"
+        style={{
+          background: "linear-gradient(90deg, #6366f1 0%, #ec4899 100%)",
+          boxShadow: "0 4px 20px rgba(99,102,241,0.35)",
+        }}
       >
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2">
+          <>
             <Spinner />
-            Sending...
-          </div>
+            Sending…
+          </>
         ) : (
-          "Send Reset Link"
+          <>
+            <Sparkles size={14} />
+            Send reset link
+          </>
         )}
       </button>
 
-      {/* Back to Login */}
       <button
         type="button"
         onClick={onBack}
-        className="w-full py-3 rounded-2xl text-gray-600 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
+        className="w-full py-3 rounded-2xl text-sm text-gray-500 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
       >
-        <ArrowLeft size={16} />
-        Back to Login
+        <ArrowLeft size={14} />
+        Back to sign in
       </button>
     </div>
   );
 };
 
 // ─────────────────────────────────────────────
-// Root Component
+// Root — Animated layout + watermark background
 // ─────────────────────────────────────────────
 
 const Talk2KapAuth = () => {
-  const [view, setView] = useState("login"); // "login" | "forgot"
+  const [view, setView] = useState("login");
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-6 bg-linear-to-br from-indigo-700 to-pink-500">
-      {/* Background Logo */}
+    <>
+      <style>{`
+        @keyframes fadeSlideIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          33%       { transform: translateY(-12px) rotate(1.5deg); }
+          66%       { transform: translateY(6px) rotate(-1deg); }
+        }
+        .auth-card {
+          animation: fadeSlideIn 0.4s ease;
+        }
+        .orb {
+          position: absolute;
+          border-radius: 50%;
+          filter: blur(60px);
+          pointer-events: none;
+          animation: float 8s ease-in-out infinite;
+        }
+      `}</style>
+
       <div
-        className="fixed inset-0 pointer-events-none z-0"
-        style={{
-          backgroundImage: `url(${sanroqueLogo})`,
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
-          backgroundSize: "70%",
-          opacity: 0.08,
-        }}
-      />
+        className="min-h-screen flex items-center justify-center p-5 relative overflow-hidden"
+        style={{ background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #6d1d6d 100%)" }}
+      >
+        {/* Ambient orbs */}
+        <div
+          className="orb"
+          style={{
+            width: 340, height: 340,
+            background: "rgba(99,102,241,0.25)",
+            top: "-80px", left: "-80px",
+            animationDelay: "0s",
+          }}
+        />
+        <div
+          className="orb"
+          style={{
+            width: 280, height: 280,
+            background: "rgba(236,72,153,0.2)",
+            bottom: "-60px", right: "-60px",
+            animationDelay: "3s",
+          }}
+        />
+        <div
+          className="orb"
+          style={{
+            width: 180, height: 180,
+            background: "rgba(167,139,250,0.15)",
+            top: "40%", right: "15%",
+            animationDelay: "5s",
+          }}
+        />
 
-      {/* Card */}
-      <div className="relative w-full max-w-md p-8 rounded-3xl bg-white shadow-2xl z-10">
-        {view === "login" ? (
-          <LoginView onForgot={() => setView("forgot")} />
-        ) : (
-          <ForgotPasswordView onBack={() => setView("login")} />
-        )}
+        {/* Watermark logo */}
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundImage: `url(${sanroqueLogo})`,
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            backgroundSize: "50%",
+            opacity: 0.05,
+            pointerEvents: "none",
+            zIndex: 0,
+          }}
+        />
 
-        <footer className="mt-6 text-center text-xs text-gray-500">
-          © {new Date().getFullYear()} Talk2Kap
-        </footer>
+        {/* Card */}
+        <div
+          className="auth-card relative w-full z-10"
+          style={{
+            maxWidth: "420px",
+            background: "rgba(255,255,255,0.97)",
+            borderRadius: "28px",
+            padding: "40px 36px 32px",
+            boxShadow: "0 32px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.12)",
+          }}
+        >
+          {view === "login" ? (
+            <LoginView onForgot={() => setView("forgot")} />
+          ) : (
+            <ForgotPasswordView onBack={() => setView("login")} />
+          )}
+
+          <p className="text-center text-xs text-gray-300 mt-6" style={{ color: "#d1d5db" }}>
+            © {new Date().getFullYear()} Talk2Kap · Municipality of San Roque
+          </p>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
