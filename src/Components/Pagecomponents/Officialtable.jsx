@@ -28,25 +28,51 @@ const emptyForm = {
   firstName: "",
   middleInitial: "",
   lastName: "",
+  suffix: "",
   position: "Kagawad",
   email: "",
   contactNumber: "",
   picture: "",
 };
 
-const buildFullName = ({ firstName, middleInitial, lastName }) => {
+// Capitalize first letter only, preserve rest
+const capitalizeFirst = (str) => {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+
+const buildFullName = ({ firstName, middleInitial, lastName, suffix }) => {
   const mi = middleInitial?.trim() ? `${middleInitial.trim().replace(/\.?$/, "")}.` : "";
-  return [firstName?.trim(), mi, lastName?.trim()].filter(Boolean).join(" ");
+  return [firstName?.trim(), mi, lastName?.trim(), suffix?.trim()].filter(Boolean).join(" ");
 };
 
 const splitFullName = (fullName = "") => {
   const parts = fullName.trim().split(/\s+/);
-  if (parts.length === 1) return { firstName: parts[0], middleInitial: "", lastName: "" };
-  if (parts.length === 2) return { firstName: parts[0], middleInitial: "", lastName: parts[1] };
+  if (parts.length === 1) return { firstName: parts[0], middleInitial: "", lastName: "", suffix: "" };
+  if (parts.length === 2) return { firstName: parts[0], middleInitial: "", lastName: parts[1], suffix: "" };
+
+  // Check if last part is a known suffix
+  const knownSuffixes = ["Jr.", "Sr.", "Jr", "Sr", "II", "III", "IV", "V"];
+  const lastPart = parts[parts.length - 1];
+  const hasSuffix = knownSuffixes.includes(lastPart);
+
+  if (hasSuffix && parts.length >= 3) {
+    const suffix = lastPart;
+    const lastName = parts[parts.length - 2];
+    const middleInitial = parts.length >= 4 ? parts[parts.length - 3] : "";
+    const firstName = parts.slice(0, parts.length - (middleInitial ? 3 : 2)).join(" ") || parts[0];
+    return { firstName, middleInitial, lastName, suffix };
+  }
+
   const lastName = parts[parts.length - 1];
   const middleInitial = parts[parts.length - 2];
   const firstName = parts.slice(0, parts.length - 2).join(" ");
-  return { firstName, middleInitial, lastName };
+  return { firstName, middleInitial, lastName, suffix: "" };
+};
+
+// Phone validation: must start with 09 and be exactly 11 digits
+const isValidPhoneNumber = (number) => {
+  return /^09\d{9}$/.test(number);
 };
 
 /* =======================
@@ -204,6 +230,7 @@ export default function OfficialTable() {
   const [positionFilter, setPositionFilter] = useState("All Positions");
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [formErrors, setFormErrors] = useState({});
   const [selectedOfficial, setSelectedOfficial] = useState(null);
   const [showFormModal, setShowFormModal] = useState(false);
 
@@ -274,10 +301,56 @@ export default function OfficialTable() {
     });
   }, [officials, searchTerm, positionFilter]);
 
+  // ── Input handlers with constraints ──────────────────────────────────────
+  const handleFirstNameChange = (e) => {
+    const raw = e.target.value.slice(0, 20);
+    const capitalized = capitalizeFirst(raw);
+    setForm((prev) => ({ ...prev, firstName: capitalized }));
+    setFormErrors((p) => ({ ...p, firstName: undefined }));
+  };
+
+  const handleLastNameChange = (e) => {
+    const raw = e.target.value.slice(0, 20);
+    const capitalized = capitalizeFirst(raw);
+    setForm((prev) => ({ ...prev, lastName: capitalized }));
+    setFormErrors((p) => ({ ...p, lastName: undefined }));
+  };
+
+  const handlePhoneChange = (e) => {
+    // Only allow digits, max 11
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
+    setForm((prev) => ({ ...prev, contactNumber: digits }));
+    setFormErrors((p) => ({ ...p, contactNumber: undefined }));
+  };
+
+  const handleEmailChange = (e) => {
+    const val = e.target.value.slice(0, 50);
+    setForm((prev) => ({ ...prev, email: val }));
+    setFormErrors((p) => ({ ...p, email: undefined }));
+  };
+
+  const handleSuffixChange = (e) => {
+    const val = e.target.value.slice(0, 5);
+    setForm((prev) => ({ ...prev, suffix: val }));
+  };
+
   // VALIDATION before showing confirm modal
+  const validateForm = () => {
+    const errors = {};
+    if (!form.firstName.trim()) errors.firstName = "First name is required.";
+    if (!form.lastName.trim()) errors.lastName = "Last name is required.";
+    if (form.contactNumber && !isValidPhoneNumber(form.contactNumber)) {
+      errors.contactNumber = "Phone number must start with 09 and be 11 digits.";
+    }
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      errors.email = "Invalid email format.";
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleAddClick = () => {
-    if (!form.firstName.trim() || !form.lastName.trim())
-      return alert("Please enter at least First Name and Last Name.");
+    if (!validateForm()) return;
 
     if (form.position === "Kapitan") {
       const existingKapitan = officials.find((o) => o.position === "Kapitan");
@@ -298,10 +371,13 @@ export default function OfficialTable() {
         contactNumber: form.contactNumber,
         picture: form.picture,
       });
+      const createdName = buildFullName(form);
+      const createdPosition = form.position;
       setForm(emptyForm);
+      setFormErrors({});
       setShowFormModal(false);
       setShowConfirmModal(false);
-      setSuccessMessage(`${buildFullName(form)} has been successfully added as ${form.position}.`);
+      setSuccessMessage(`${createdName} has been successfully added as ${createdPosition}.`);
     } catch (err) {
       console.error("Error creating official:", err);
       alert(
@@ -316,14 +392,21 @@ export default function OfficialTable() {
 
   const startEdit = (o) => {
     setEditing(o.id);
-    setForm({ ...splitFullName(o.name), position: o.position, email: o.email, contactNumber: o.contactNumber, picture: o.picture });
+    const parsed = splitFullName(o.name);
+    setForm({
+      ...parsed,
+      position: o.position,
+      email: o.email,
+      contactNumber: o.contactNumber,
+      picture: o.picture,
+    });
+    setFormErrors({});
     setShowFormModal(true);
   };
 
   const saveEdit = async () => {
     if (!editing) return;
-    if (!form.firstName.trim() || !form.lastName.trim())
-      return alert("Please enter at least First Name and Last Name.");
+    if (!validateForm()) return;
 
     if (form.position === "Kapitan") {
       const existingKapitan = officials.find((o) => o.position === "Kapitan" && o.id !== editing);
@@ -338,10 +421,12 @@ export default function OfficialTable() {
         contactNumber: form.contactNumber,
         picture: form.picture,
       });
+      const updatedName = buildFullName(form);
       setEditing(null);
       setForm(emptyForm);
+      setFormErrors({});
       setShowFormModal(false);
-      setSuccessMessage(`${buildFullName(form)}'s information has been successfully updated.`);
+      setSuccessMessage(`${updatedName}'s information has been successfully updated.`);
     } catch (err) {
       console.error("Error updating official:", err);
       alert(
@@ -371,6 +456,7 @@ export default function OfficialTable() {
     setShowFormModal(false);
     setEditing(null);
     setForm(emptyForm);
+    setFormErrors({});
   };
 
   return (
@@ -427,7 +513,7 @@ export default function OfficialTable() {
                 />
               </div>
               <button
-                onClick={() => { setEditing(null); setForm(emptyForm); setShowFormModal(true); }}
+                onClick={() => { setEditing(null); setForm(emptyForm); setFormErrors({}); setShowFormModal(true); }}
                 className="inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-extrabold hover:bg-emerald-700 transition shadow-md whitespace-nowrap text-sm"
               >
                 <FiPlus size={16} /> Add Official
@@ -614,18 +700,26 @@ export default function OfficialTable() {
                   Full Name
                 </p>
                 <div className="grid grid-cols-12 gap-3">
-                  <div className="col-span-12 sm:col-span-5">
+                  {/* First Name */}
+                  <div className="col-span-12 sm:col-span-4">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
                       First Name <span className="text-rose-500">*</span>
                     </label>
                     <input
                       placeholder="e.g., Juan"
                       value={form.firstName}
-                      onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      onChange={handleFirstNameChange}
+                      maxLength={20}
+                      className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
+                        ${formErrors.firstName ? "border-red-400" : "border-gray-200"}`}
                     />
+                    <div className="flex items-center justify-between mt-1">
+                      {formErrors.firstName && <p className="text-xs text-red-500">{formErrors.firstName}</p>}
+                      <p className="text-xs text-gray-400 ml-auto">{form.firstName.length}/20</p>
+                    </div>
                   </div>
 
+                  {/* Middle Initial */}
                   <div className="col-span-12 sm:col-span-2">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
                       M.I.
@@ -639,15 +733,36 @@ export default function OfficialTable() {
                     />
                   </div>
 
-                  <div className="col-span-12 sm:col-span-5">
+                  {/* Last Name */}
+                  <div className="col-span-12 sm:col-span-4">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
                       Last Name <span className="text-rose-500">*</span>
                     </label>
                     <input
                       placeholder="e.g., Dela Cruz"
                       value={form.lastName}
-                      onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      onChange={handleLastNameChange}
+                      maxLength={20}
+                      className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
+                        ${formErrors.lastName ? "border-red-400" : "border-gray-200"}`}
+                    />
+                    <div className="flex items-center justify-between mt-1">
+                      {formErrors.lastName && <p className="text-xs text-red-500">{formErrors.lastName}</p>}
+                      <p className="text-xs text-gray-400 ml-auto">{form.lastName.length}/20</p>
+                    </div>
+                  </div>
+
+                  {/* Suffix */}
+                  <div className="col-span-12 sm:col-span-2">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
+                      Suffix
+                    </label>
+                    <input
+                      placeholder="Jr."
+                      value={form.suffix}
+                      onChange={handleSuffixChange}
+                      maxLength={5}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-center"
                     />
                   </div>
                 </div>
@@ -687,9 +802,15 @@ export default function OfficialTable() {
                     type="email"
                     placeholder="e.g., juan@example.com"
                     value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    onChange={handleEmailChange}
+                    maxLength={50}
+                    className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
+                      ${formErrors.email ? "border-red-400" : "border-gray-200"}`}
                   />
+                  <div className="flex items-center justify-between mt-1">
+                    {formErrors.email && <p className="text-xs text-red-500">{formErrors.email}</p>}
+                    <p className="text-xs text-gray-400 ml-auto">{form.email.length}/50</p>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1 flex items-center gap-1">
@@ -697,11 +818,18 @@ export default function OfficialTable() {
                   </label>
                   <input
                     type="tel"
-                    placeholder="e.g., +63 912 345 6789"
+                    placeholder="e.g., 09123456789"
                     value={form.contactNumber}
-                    onChange={(e) => setForm({ ...form, contactNumber: e.target.value })}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    onChange={handlePhoneChange}
+                    maxLength={11}
+                    className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
+                      ${formErrors.contactNumber ? "border-red-400" : "border-gray-200"}`}
                   />
+                  {formErrors.contactNumber ? (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.contactNumber}</p>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-1">{form.contactNumber.length}/11 — must start with 09</p>
+                  )}
                 </div>
               </div>
 
@@ -763,7 +891,6 @@ export default function OfficialTable() {
                   </>
                 ) : (
                   <>
-                    {/* Add button now triggers confirmation modal */}
                     <button
                       onClick={handleAddClick}
                       className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl font-extrabold hover:bg-emerald-700 transition shadow-md text-sm"

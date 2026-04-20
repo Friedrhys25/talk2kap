@@ -49,6 +49,12 @@ const capitalize = (str) => {
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 };
 
+// Capitalize first letter only, preserve rest
+const capitalizeFirst = (str) => {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+
 const positionOptions = [
   "All Positions",
   "BARANGAY UTILITY",
@@ -268,6 +274,11 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSiz
   );
 };
 
+// ── Phone validation ──────────────────────────────────────────────────────────
+const isValidPhoneNumber = (number) => {
+  return /^09\d{9}$/.test(number);
+};
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function EmployeeTable() {
   const [employees, setEmployees] = useState([]);
@@ -295,10 +306,14 @@ export default function EmployeeTable() {
     const empQuery = query(empCol, where("isEmployee", "==", true), where("idstatus", "==", "verified"));
     const unsubscribe = onSnapshot(empQuery, (snapshot) => {
       const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // Sort alphabetically by lastName then firstName
       list.sort((a, b) => {
-        const ln = (a.lastName || "").localeCompare(b.lastName || "");
-        if (ln !== 0) return ln;
-        return (a.firstName || "").localeCompare(b.firstName || "");
+        const lastNameA = (a.lastName || "").toLowerCase();
+        const lastNameB = (b.lastName || "").toLowerCase();
+        if (lastNameA !== lastNameB) return lastNameA.localeCompare(lastNameB);
+        const firstNameA = (a.firstName || "").toLowerCase();
+        const firstNameB = (b.firstName || "").toLowerCase();
+        return firstNameA.localeCompare(firstNameB);
       });
       setEmployees(list);
     });
@@ -411,11 +426,52 @@ export default function EmployeeTable() {
     return "Needs Improvement";
   };
 
+  // ── Input handlers with constraints ──────────────────────────────────────
+  const handleFirstNameChange = (e) => {
+    const raw = e.target.value.slice(0, 20);
+    const capitalized = capitalizeFirst(raw);
+    setForm((prev) => ({ ...prev, firstName: capitalized }));
+    setFormErrors((p) => ({ ...p, firstName: undefined }));
+  };
+
+  const handleLastNameChange = (e) => {
+    const raw = e.target.value.slice(0, 20);
+    const capitalized = capitalizeFirst(raw);
+    setForm((prev) => ({ ...prev, lastName: capitalized }));
+    setFormErrors((p) => ({ ...p, lastName: undefined }));
+  };
+
+  const handlePhoneChange = (e) => {
+    // Only allow digits, max 11
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
+    setForm((prev) => ({ ...prev, number: digits }));
+    setFormErrors((p) => ({ ...p, number: undefined }));
+  };
+
+  const handleAddressChange = (e) => {
+    const val = e.target.value.slice(0, 50);
+    setForm((prev) => ({ ...prev, address: val }));
+  };
+
+  const handleEmailChange = (e) => {
+    const val = e.target.value.slice(0, 50);
+    setForm((prev) => ({ ...prev, email: val }));
+    setFormErrors((p) => ({ ...p, email: undefined }));
+  };
+
+  const handleSuffixChange = (e) => {
+    const val = e.target.value.slice(0, 5);
+    setForm((prev) => ({ ...prev, suffix: val }));
+  };
+
   // ── CRUD ──────────────────────────────────────────────────────────────────
   const validateForm = () => {
     const errors = {};
     if (!form.firstName.trim()) errors.firstName = "First name is required.";
     if (!form.lastName.trim()) errors.lastName = "Last name is required.";
+    if (form.number && !isValidPhoneNumber(form.number)) {
+      errors.number = "Phone number must start with 09 and be 11 digits.";
+    }
     if (!editing) {
       if (!form.email.trim()) errors.email = "Email is required.";
       else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = "Invalid email format.";
@@ -495,6 +551,11 @@ export default function EmployeeTable() {
 
   const saveEdit = async () => {
     if (!editing) return;
+    // Validate phone if provided
+    if (form.number && !isValidPhoneNumber(form.number)) {
+      setFormErrors((p) => ({ ...p, number: "Phone number must start with 09 and be 11 digits." }));
+      return;
+    }
     await updateDoc(doc(db, "employee", editing), {
       position: form.position,
       number: form.number.trim(),
@@ -778,12 +839,16 @@ export default function EmployeeTable() {
                       placeholder="e.g., Maria"
                       value={form.firstName}
                       disabled={!!editing}
-                      onChange={(e) => { setForm({ ...form, firstName: e.target.value }); setFormErrors((p) => ({ ...p, firstName: undefined })); }}
+                      onChange={handleFirstNameChange}
+                      maxLength={20}
                       className={`w-full border rounded-xl px-4 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
                         ${editing ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-100" : "bg-white border-gray-200"}
                         ${formErrors.firstName ? "border-red-400" : ""}`}
                     />
-                    {formErrors.firstName && <p className="text-xs text-red-500 mt-1">{formErrors.firstName}</p>}
+                    <div className="flex items-center justify-between mt-1">
+                      {formErrors.firstName && <p className="text-xs text-red-500">{formErrors.firstName}</p>}
+                      {!editing && <p className="text-xs text-gray-400 ml-auto">{form.firstName.length}/20</p>}
+                    </div>
                   </div>
 
                   {/* Middle Initial */}
@@ -811,12 +876,16 @@ export default function EmployeeTable() {
                       placeholder="e.g., Santos"
                       value={form.lastName}
                       disabled={!!editing}
-                      onChange={(e) => { setForm({ ...form, lastName: e.target.value }); setFormErrors((p) => ({ ...p, lastName: undefined })); }}
+                      onChange={handleLastNameChange}
+                      maxLength={20}
                       className={`w-full border rounded-xl px-4 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
                         ${editing ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-100" : "bg-white border-gray-200"}
                         ${formErrors.lastName ? "border-red-400" : ""}`}
                     />
-                    {formErrors.lastName && <p className="text-xs text-red-500 mt-1">{formErrors.lastName}</p>}
+                    <div className="flex items-center justify-between mt-1">
+                      {formErrors.lastName && <p className="text-xs text-red-500">{formErrors.lastName}</p>}
+                      {!editing && <p className="text-xs text-gray-400 ml-auto">{form.lastName.length}/20</p>}
+                    </div>
                   </div>
 
                   {/* Suffix */}
@@ -828,7 +897,8 @@ export default function EmployeeTable() {
                       placeholder="Jr."
                       value={form.suffix}
                       disabled={!!editing}
-                      onChange={(e) => setForm({ ...form, suffix: e.target.value })}
+                      onChange={handleSuffixChange}
+                      maxLength={5}
                       className={`w-full border rounded-xl px-3 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-center
                         ${editing ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-100" : "bg-white border-gray-200"}`}
                     />
@@ -883,9 +953,15 @@ export default function EmployeeTable() {
                       type="tel"
                       placeholder="e.g., 09123456789"
                       value={form.number}
-                      onChange={(e) => setForm({ ...form, number: e.target.value })}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      onChange={handlePhoneChange}
+                      maxLength={11}
+                      className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
+                        ${formErrors.number ? "border-red-400" : "border-gray-200"}`}
                     />
+                    {formErrors.number && <p className="text-xs text-red-500 mt-1">{formErrors.number}</p>}
+                    {!formErrors.number && (
+                      <p className="text-xs text-gray-400 mt-1">{form.number.length}/11 — must start with 09</p>
+                    )}
                   </div>
 
                   {/* Purok */}
@@ -909,9 +985,11 @@ export default function EmployeeTable() {
                     <input
                       placeholder="lot/block/street"
                       value={form.address}
-                      onChange={(e) => setForm({ ...form, address: e.target.value })}
+                      onChange={handleAddressChange}
+                      maxLength={50}
                       className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                     />
+                    <p className="text-xs text-gray-400 mt-1">{form.address.length}/50</p>
                   </div>
                 </div>
               </div>
@@ -935,10 +1013,14 @@ export default function EmployeeTable() {
                         autoComplete="new-email"
                         placeholder="e.g., maria@example.com"
                         value={form.email}
-                        onChange={(e) => { setForm({ ...form, email: e.target.value }); setFormErrors((p) => ({ ...p, email: undefined })); }}
+                        onChange={handleEmailChange}
+                        maxLength={50}
                         className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${formErrors.email ? "border-red-400" : "border-gray-200"}`}
                       />
-                      {formErrors.email && <p className="text-xs text-red-500 mt-1">{formErrors.email}</p>}
+                      <div className="flex items-center justify-between mt-1">
+                        {formErrors.email && <p className="text-xs text-red-500">{formErrors.email}</p>}
+                        <p className="text-xs text-gray-400 ml-auto">{form.email.length}/50</p>
+                      </div>
                     </div>
 
                     {/* Password */}
