@@ -246,8 +246,7 @@ export default function OfficialTable() {
       "Kagawad",
       "Secretary",
       "Treasurer",
-      "Barangay Record Keeper",
-      "Barangay Clerk",
+      
     ],
     []
   );
@@ -273,8 +272,7 @@ export default function OfficialTable() {
         Kagawad: 1,
         Secretary: 2,
         Treasurer: 3,
-        "Barangay Record Keeper": 4,
-        "Barangay Clerk": 5,
+       
       };
       list.sort((a, b) => {
         const ao = posOrder[a.position] ?? 99;
@@ -795,7 +793,7 @@ export default function OfficialTable() {
               {/* Email & Contact */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1 flex items-center gap-1">
+                <label className="flex text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1 items-center gap-1">
                     <FiMail size={11} /> Email
                   </label>
                   <input
@@ -813,7 +811,7 @@ export default function OfficialTable() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1 flex items-center gap-1">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1 items-center gap-1">
                     <FiPhone size={11} /> Contact Number
                   </label>
                   <input
@@ -835,7 +833,7 @@ export default function OfficialTable() {
 
               {/* Picture */}
               <div>
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1 flex items-center gap-1">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1  items-center gap-1">
                   <FiImage size={11} /> Picture
                 </label>
                 <input

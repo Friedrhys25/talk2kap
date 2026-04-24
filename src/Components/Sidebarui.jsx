@@ -1,8 +1,8 @@
-// Sidebarui.jsx - Updated with Emergency Hotlines
+// Sidebarui.jsx - Updated with Emergency Hotlines + User List
 import React, { useState, useEffect, useRef } from "react";
 import {
   FiAlertCircle, FiMail, FiArrowLeftCircle, FiChevronsRight,
-  FiBell, FiHome, FiBarChart, FiUsers, FiX, FiUser, FiPhone,
+  FiBell, FiHome, FiBarChart, FiUsers, FiX, FiUser, FiPhone, FiList,
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -17,10 +17,12 @@ import Dashpage       from "../Pages/Sidebarpages/Dashpage";
 import Salepage       from "../Pages/Sidebarpages/Notifpage";
 import Messagepage    from "../Pages/Sidebarpages/Messagepage";
 import Uservalid      from "../Pages/Sidebarpages/Uservalid";
+import Userpage       from "../Pages/Sidebarpages/Userpage";
 import Reportspage    from "../Pages/Sidebarpages/Reportspage";
 import Officialpage   from "../Pages/Sidebarpages/Officialpage";
 import Employeepage   from "../Pages/Sidebarpages/Employeepage";
 import Emergencypage  from "../Pages/Sidebarpages/emergencypage";
+
 
 const firestore = getFirestore(app);
 
@@ -83,7 +85,7 @@ export const Example = () => {
       if (newComplaintsCount > previousComplaintsCountRef.current && !sirenPlayedRef.current && audioRef.current) {
         audioRef.current.currentTime = 0;
         audioRef.current.play().catch(err => console.log("Audio play failed:", err));
-        sirenPlayedRef.current = true; // Mark that siren has played for this batch
+        sirenPlayedRef.current = true;
       }
       
       // Reset siren flag when all complaints are resolved
@@ -101,7 +103,6 @@ export const Example = () => {
       employeeSnapshot.forEach((empDoc) => {
         const empId = empDoc.id;
         const empData = empDoc.data();
-        // Include if idstatus is null, undefined, or "pending"
         const status = (empData.idstatus || "").toLowerCase();
         tanodValidationMap[empId] = status === "" || status === "pending";
       });
@@ -260,6 +261,7 @@ const Sidebar = ({ selected, setSelected, pendingComplaintsCount, pendingValidat
     { title: "Complaints",         Icon: FiAlertCircle, notifs: pendingComplaintsCount  > 0 ? pendingComplaintsCount  : null },
     { title: "Messages",           Icon: FiMail,        notifs: unreadMessagesCount     > 0 ? unreadMessagesCount     : null },
     { title: "Validations",        Icon: FiUser,        notifs: pendingValidationsCount > 0 ? pendingValidationsCount : null },
+    { title: "User List",          Icon: FiList },
     { title: "Reports",            Icon: FiBarChart },
     { title: "Barangay Officials", Icon: FiUsers },
     { title: "Barangay Employees", Icon: FiUsers },
@@ -442,7 +444,8 @@ const ExampleContent = ({ selected }) => (
         {selected === "Dashboard"          && <PageWrap key="dashboard"  ><Dashpage      /></PageWrap>}
         {selected === "Complaints"         && <PageWrap key="complaints" ><Salepage      /></PageWrap>}
         {selected === "Messages"           && <PageWrap key="messages"   ><Messagepage   /></PageWrap>}
-        {selected === "Validations"         && <PageWrap key="validation" ><Uservalid     /></PageWrap>}
+        {selected === "Validations"        && <PageWrap key="validation" ><Uservalid     /></PageWrap>}
+        {selected === "User List"          && <PageWrap key="userlist"   ><Userpage      /></PageWrap>}
         {selected === "Reports"            && <PageWrap key="reports"    ><Reportspage   /></PageWrap>}
         {selected === "Barangay Officials" && <PageWrap key="officials"  ><Officialpage  /></PageWrap>}
         {selected === "Barangay Employees" && <PageWrap key="employees"  ><Employeepage  /></PageWrap>}

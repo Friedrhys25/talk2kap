@@ -1,11 +1,12 @@
 // Validations.jsx - sorted by createdAt (newest first) for both residents & tanods
+// Verified residents → Usertable | Verified tanods → EmployeeTable
 import React, { useState, useEffect, useMemo } from "react";
 import barangayLogo from "../../assets/sanroquelogo.png";
 
 import {
   FiUser, FiPhone, FiMapPin, FiHome,
   FiX, FiSearch, FiCheck, FiSlash, FiTrash2, FiShield, FiSun, FiMoon,
-  FiChevronLeft, FiChevronRight, FiClock,
+  FiChevronLeft, FiChevronRight, FiClock, FiAlertCircle, FiUserX,
 } from "react-icons/fi";
 import {
   getFirestore,
@@ -104,20 +105,23 @@ const Toast = ({ toast, onDismiss }) => {
         className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl border ${
           isApproved
             ? "bg-emerald-600 border-emerald-400 text-white"
+            : toast.type === "disabled"
+            ? "bg-gray-700 border-gray-500 text-white"
             : "bg-rose-600 border-rose-400 text-white"
         }`}
         style={{ minWidth: 320 }}
       >
-        {/* Animated icon circle */}
         <div
-          className={`flex items-center justify-center w-11 h-11 rounded-full border-2 shrink-0 ${
-            isApproved ? "bg-white/20 border-white/40" : "bg-white/20 border-white/40"
-          }`}
+          className="flex items-center justify-center w-11 h-11 rounded-full border-2 shrink-0 bg-white/20 border-white/40"
           style={{ animation: "toastPop 0.5s 0.15s cubic-bezier(0.34,1.56,0.64,1) both" }}
         >
           {isApproved ? (
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12" />
+            </svg>
+          ) : toast.type === "disabled" ? (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
             </svg>
           ) : (
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
@@ -128,11 +132,13 @@ const Toast = ({ toast, onDismiss }) => {
 
         <div className="flex-1 min-w-0">
           <p className="text-base font-extrabold leading-tight">
-            {isApproved ? "Successfully Approved!" : "Successfully Declined!"}
+            {isApproved
+              ? "Successfully Approved!"
+              : toast.type === "disabled"
+              ? "Account Disabled!"
+              : "Successfully Declined!"}
           </p>
-          <p className="text-xs font-semibold opacity-80 mt-0.5 truncate">
-            {toast.name}
-          </p>
+          <p className="text-xs font-semibold opacity-80 mt-0.5 truncate">{toast.name}</p>
         </div>
 
         <button
@@ -146,8 +152,98 @@ const Toast = ({ toast, onDismiss }) => {
   );
 };
 
+// ── Decline Reason Modal ────────────────────────────────────────────────────
+const DeclineModal = ({ user, onConfirm, onCancel }) => {
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+
+  const handleConfirm = () => {
+    if (!reason.trim()) {
+      setError("Please enter a reason for declining.");
+      return;
+    }
+    onConfirm(reason.trim());
+  };
+
+  if (!user) return null;
+
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-60 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white rounded-[22px] w-full max-w-md relative shadow-2xl overflow-hidden border border-white/60"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal header */}
+        <div className="relative p-6 text-white bg-linear-to-r from-rose-600 via-rose-500 to-rose-700">
+          <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-3xl" />
+          <button
+            className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full p-2 transition-all"
+            onClick={onCancel}
+          >
+            <FiX size={22} />
+          </button>
+          <div className="relative flex items-center gap-3">
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-white/20 border border-white/30">
+              <FiAlertCircle size={24} />
+            </div>
+            <div>
+              <h2 className="text-xl font-extrabold">Decline Account</h2>
+              <p className="text-rose-100 text-xs font-semibold mt-0.5 truncate max-w-60">
+                {user.complainant || "—"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-extrabold uppercase tracking-wider text-gray-600 mb-2">
+              Reason for Declining <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              className={`w-full px-4 py-3 rounded-xl border ${
+                error ? "border-rose-400 focus:ring-rose-400" : "border-gray-200 focus:ring-indigo-400"
+              } bg-gray-50 text-sm font-semibold text-gray-800 resize-none focus:outline-none focus:ring-2 focus:border-transparent transition`}
+              rows={4}
+              placeholder="Enter the reason for declining this account..."
+              value={reason}
+              onChange={(e) => {
+                setReason(e.target.value);
+                if (error) setError("");
+              }}
+            />
+            {error && (
+              <p className="mt-1.5 text-xs font-bold text-rose-600 flex items-center gap-1">
+                <FiAlertCircle size={12} /> {error}
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-extrabold hover:bg-gray-200 transition"
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+            <button
+              className="flex-1 py-3 rounded-xl bg-rose-600 text-white font-extrabold hover:bg-rose-700 transition shadow-md"
+              onClick={handleConfirm}
+            >
+              ✕ Confirm Decline
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Pagination Component ────────────────────────────────────────────────────
-const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSize, accent = "indigo" }) => {
+const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSize }) => {
   if (totalPages <= 1) return null;
 
   const from = (currentPage - 1) * pageSize + 1;
@@ -166,7 +262,9 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSiz
     }
   }
 
-  const dedupedPages = pages.filter((p, idx) => !(p === "..." && pages[idx - 1] === "..."));
+  const dedupedPages = pages.filter(
+    (p, idx) => !(p === "..." && pages[idx - 1] === "...")
+  );
 
   const btnBase = `inline-flex items-center justify-center w-8 h-8 rounded-lg text-xs font-extrabold border transition`;
   const activeBtn = "bg-indigo-600 text-white border-indigo-600 shadow";
@@ -223,22 +321,25 @@ const Validations = () => {
   const [loading, setLoading] = useState(true);
   const [tanodLoading, setTanodLoading] = useState(true);
 
-  // Toast state: { type: "approved" | "declined", name: string } | null
+  // Toast state
   const [toast, setToast] = useState(null);
+
+  // Decline modal state
+  const [declineTarget, setDeclineTarget] = useState(null);
 
   // Pagination state
   const [residentPage, setResidentPage] = useState(1);
   const [tanodPage, setTanodPage] = useState(1);
 
-  // Tanod-specific state
+  // Tanod-specific filters
   const [tanodSearch, setTanodSearch] = useState("");
   const [tanodPurokFilter, setTanodPurokFilter] = useState("All Purok");
 
-  // Reset page when filters change
+  // Reset pages when filters change
   useEffect(() => { setResidentPage(1); }, [searchTerm, filter, purokFilter]);
   useEffect(() => { setTanodPage(1); }, [tanodSearch, tanodPurokFilter]);
 
-  // ── Firestore listener (Residents) ─────────────────────────────────────────
+  // ── Firestore listener (Residents) ────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(firestore, "users"),
@@ -275,15 +376,15 @@ const Validations = () => {
     return () => unsubscribe();
   }, []);
 
-  // ── Firestore listener (Tanods/Employees) ──────────────────────────────────
+  // ── Firestore listener (Tanods/Employees) ─────────────────────────────────
   useEffect(() => {
     const empCol = collection(firestore, "employee");
-    const unsubscribe = onSnapshot(empCol, (snapshot) => {
-      const tanodArray = [];
-      snapshot.forEach((docSnap) => {
-        const tanod = docSnap.data();
-        const idStatus = (tanod.idstatus || "").toLowerCase();
-        if (idStatus === "" || idStatus === "pending" || !tanod.idstatus) {
+    const unsubscribe = onSnapshot(
+      empCol,
+      (snapshot) => {
+        const tanodArray = [];
+        snapshot.forEach((docSnap) => {
+          const tanod = docSnap.data();
           tanodArray.push({
             id: docSnap.id,
             complainant: [tanod.firstName, tanod.middleName, tanod.lastName]
@@ -292,25 +393,25 @@ const Validations = () => {
             idstatus: normalizeStatus(tanod.idstatus),
             _collection: "employee",
           });
-        }
-      });
+        });
 
-      tanodArray.sort((a, b) => {
-        const da = toDate(a.createdAt);
-        const db = toDate(b.createdAt);
-        if (da && db) return db - da;
-        if (da) return -1;
-        if (db) return 1;
-        return (a.complainant || "").localeCompare(b.complainant || "");
-      });
+        tanodArray.sort((a, b) => {
+          const da = toDate(a.createdAt);
+          const db = toDate(b.createdAt);
+          if (da && db) return db - da;
+          if (da) return -1;
+          if (db) return 1;
+          return (a.complainant || "").localeCompare(b.complainant || "");
+        });
 
-      setTanods(tanodArray);
-      setTanodLoading(false);
-    },
-    (err) => {
-      console.error("Firestore error fetching tanods:", err);
-      setTanodLoading(false);
-    });
+        setTanods(tanodArray);
+        setTanodLoading(false);
+      },
+      (err) => {
+        console.error("Firestore error fetching tanods:", err);
+        setTanodLoading(false);
+      }
+    );
     return () => unsubscribe();
   }, []);
 
@@ -359,25 +460,28 @@ const Validations = () => {
     return [...base, ...extras];
   }, [tanods]);
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
+  // ── Stats (counted from full arrays so totals remain informative) ─────────
   const stats = useMemo(() => ({
-    total:    residents.length,
+    total:    residents.filter((u) => u.idstatus !== "verified").length,
     pending:  residents.filter((u) => u.idstatus === "pending").length,
-    verified: residents.filter((u) => u.idstatus === "verified").length,
     declined: residents.filter((u) => u.idstatus === "declined").length,
+    verified: residents.filter((u) => u.idstatus === "verified").length,
   }), [residents]);
 
   const tanodStats = useMemo(() => ({
-    total:    tanods.length,
+    total:    tanods.filter((u) => u.idstatus !== "verified").length,
     pending:  tanods.filter((u) => u.idstatus === "pending").length,
-    verified: tanods.filter((u) => u.idstatus === "verified").length,
     declined: tanods.filter((u) => u.idstatus === "declined").length,
+    verified: tanods.filter((u) => u.idstatus === "verified").length,
   }), [tanods]);
 
-  // ── Filtered residents ────────────────────────────────────────────────────
+  // ── Filtered residents (verified excluded — they live in Usertable) ───────
   const filteredUsers = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return residents.filter((user) => {
+      // Verified residents move to Usertable — exclude from this view
+      if (user.idstatus === "verified") return false;
+
       const matchesFilter = filter === "all" || user.idstatus === filter;
       const matchesSearch =
         (user.complainant || "").toLowerCase().includes(term) ||
@@ -399,10 +503,13 @@ const Validations = () => {
     return filteredUsers.slice(start, start + RESIDENT_PAGE_SIZE);
   }, [filteredUsers, residentPage]);
 
-  // ── Filtered tanods ───────────────────────────────────────────────────────
+  // ── Filtered tanods (verified excluded — they live in EmployeeTable) ──────
   const filteredTanods = useMemo(() => {
     const term = tanodSearch.toLowerCase();
     return tanods.filter((user) => {
+      // Verified tanods move to EmployeeTable — exclude from this view
+      if (user.idstatus === "verified") return false;
+
       const matchesSearch =
         (user.complainant || "").toLowerCase().includes(term) ||
         String(user.number || "").toLowerCase().includes(term) ||
@@ -434,48 +541,99 @@ const Validations = () => {
   };
 
   const shiftLabel = (shift) => {
-    if (shift === "morning") return "Morning";
-    if (shift === "evening") return "Evening";
+    if (shift === "morning") return "☀️ Morning";
+    if (shift === "evening") return "🌙 Evening";
     return "No Shift";
   };
 
-  // ── Update / Delete ───────────────────────────────────────────────────────
-  const updateStatus = async (id, newStatus) => {
-    try {
-      const isResident = residents.some(u => u.id === id);
-      const isTanod = tanods.some(t => t.id === id);
-      const userName = selectedUser?.complainant || "User";
+  // ── Decline flow ──────────────────────────────────────────────────────────
+  const initiateDecline = (user) => {
+    const isResident = residents.some((u) => u.id === user.id);
+    setDeclineTarget({
+      id: user.id,
+      name: user.complainant || "User",
+      collection: isResident ? "users" : "employee",
+    });
+  };
 
-      if (isResident) {
-        await updateDoc(doc(firestore, "users", id), { idstatus: newStatus });
-        const normalized = normalizeStatus(newStatus);
-        setUsers((prev) => prev.map((u) => u.id === id ? { ...u, idstatus: normalized } : u));
-        if (selectedUser?.id === id)
-          setSelectedUser((prev) => prev ? { ...prev, idstatus: normalized } : prev);
-      } else if (isTanod) {
-        await updateDoc(doc(firestore, "employee", id), { idstatus: newStatus });
-        const normalized = normalizeStatus(newStatus);
-        setTanods((prev) => prev.map((t) => t.id === id ? { ...t, idstatus: normalized } : t));
-        if (selectedUser?.id === id)
-          setSelectedUser((prev) => prev ? { ...prev, idstatus: normalized } : prev);
+  const confirmDecline = async (reason) => {
+    if (!declineTarget) return;
+    try {
+      await updateDoc(doc(firestore, declineTarget.collection, declineTarget.id), {
+        idstatus: "declined",
+        declineMessage: reason,
+      });
+
+      if (declineTarget.collection === "users") {
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === declineTarget.id
+              ? { ...u, idstatus: "declined", declineMessage: reason }
+              : u
+          )
+        );
+      } else {
+        setTanods((prev) =>
+          prev.map((t) =>
+            t.id === declineTarget.id
+              ? { ...t, idstatus: "declined", declineMessage: reason }
+              : t
+          )
+        );
       }
 
-      // Show toast
-      setToast({
-        type: normalizeStatus(newStatus) === "verified" ? "approved" : "declined",
-        name: userName,
-      });
+      if (selectedUser?.id === declineTarget.id) {
+        setSelectedUser((prev) =>
+          prev ? { ...prev, idstatus: "declined", declineMessage: reason } : prev
+        );
+      }
+
+      setToast({ type: "declined", name: declineTarget.name });
+      setDeclineTarget(null);
     } catch (err) {
-      console.error("Error updating status:", err);
-      alert("Failed to update status.");
+      console.error("Error declining:", err);
+      alert("Failed to decline user.");
     }
   };
 
+  // ── Approve ───────────────────────────────────────────────────────────────
+  const approveUser = async (id) => {
+    try {
+      const isResident = residents.some((u) => u.id === id);
+      const isTanod = tanods.some((t) => t.id === id);
+      const userName = selectedUser?.complainant || "User";
+
+      if (isResident) {
+        await updateDoc(doc(firestore, "users", id), { idstatus: "verified" });
+        setUsers((prev) =>
+          prev.map((u) => (u.id === id ? { ...u, idstatus: "verified" } : u))
+        );
+        if (selectedUser?.id === id)
+          setSelectedUser((prev) => (prev ? { ...prev, idstatus: "verified" } : prev));
+      } else if (isTanod) {
+        await updateDoc(doc(firestore, "employee", id), { idstatus: "verified" });
+        setTanods((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, idstatus: "verified" } : t))
+        );
+        if (selectedUser?.id === id)
+          setSelectedUser((prev) => (prev ? { ...prev, idstatus: "verified" } : prev));
+      }
+
+      setToast({ type: "approved", name: userName });
+      // Close the modal — the user is now verified and leaves this table
+      setSelectedUser(null);
+    } catch (err) {
+      console.error("Error approving:", err);
+      alert("Failed to approve user.");
+    }
+  };
+
+  // ── Delete ────────────────────────────────────────────────────────────────
   const deleteUser = async (id) => {
     if (!window.confirm("Delete this user permanently? This cannot be undone.")) return;
     try {
-      const isResident = residents.some(u => u.id === id);
-      const isTanod = tanods.some(t => t.id === id);
+      const isResident = residents.some((u) => u.id === id);
+      const isTanod = tanods.some((t) => t.id === id);
 
       if (isResident) {
         await deleteDoc(doc(firestore, "users", id));
@@ -492,21 +650,57 @@ const Validations = () => {
     }
   };
 
+  // ── Disable Account ───────────────────────────────────────────────────────
+  const disableAccount = async (id) => {
+    if (!window.confirm("Disable this account? The user will no longer be able to log in.")) return;
+    try {
+      const isResident = residents.some((u) => u.id === id);
+      const isTanod = tanods.some((t) => t.id === id);
+      const userName = selectedUser?.complainant || "User";
+
+      if (isResident) {
+        await updateDoc(doc(firestore, "users", id), { disabled: true });
+        setUsers((prev) =>
+          prev.map((u) => (u.id === id ? { ...u, disabled: true } : u))
+        );
+        if (selectedUser?.id === id)
+          setSelectedUser((prev) => (prev ? { ...prev, disabled: true } : prev));
+      } else if (isTanod) {
+        await updateDoc(doc(firestore, "employee", id), { disabled: true });
+        setTanods((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, disabled: true } : t))
+        );
+        if (selectedUser?.id === id)
+          setSelectedUser((prev) => (prev ? { ...prev, disabled: true } : prev));
+      }
+
+      setToast({ type: "disabled", name: userName });
+    } catch (err) {
+      console.error("Error disabling account:", err);
+      alert("Failed to disable account.");
+    }
+  };
+
+  // ── Update Shift ──────────────────────────────────────────────────────────
   const updateShift = async (id, newShift) => {
     try {
-      const isResident = residents.some(u => u.id === id);
-      const isTanod = tanods.some(t => t.id === id);
+      const isResident = residents.some((u) => u.id === id);
+      const isTanod = tanods.some((t) => t.id === id);
 
       if (isResident) {
         await updateDoc(doc(firestore, "users", id), { shift: newShift });
-        setUsers((prev) => prev.map((u) => u.id === id ? { ...u, shift: newShift } : u));
+        setUsers((prev) =>
+          prev.map((u) => (u.id === id ? { ...u, shift: newShift } : u))
+        );
         if (selectedUser?.id === id)
-          setSelectedUser((prev) => prev ? { ...prev, shift: newShift } : prev);
+          setSelectedUser((prev) => (prev ? { ...prev, shift: newShift } : prev));
       } else if (isTanod) {
         await updateDoc(doc(firestore, "employee", id), { shift: newShift });
-        setTanods((prev) => prev.map((t) => t.id === id ? { ...t, shift: newShift } : t));
+        setTanods((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, shift: newShift } : t))
+        );
         if (selectedUser?.id === id)
-          setSelectedUser((prev) => prev ? { ...prev, shift: newShift } : prev);
+          setSelectedUser((prev) => (prev ? { ...prev, shift: newShift } : prev));
       }
     } catch (err) {
       console.error("Error updating shift:", err);
@@ -519,6 +713,15 @@ const Validations = () => {
     <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       {/* Toast Notification */}
       <Toast toast={toast} onDismiss={() => setToast(null)} />
+
+      {/* Decline Modal */}
+      {declineTarget && (
+        <DeclineModal
+          user={declineTarget}
+          onConfirm={confirmDecline}
+          onCancel={() => setDeclineTarget(null)}
+        />
+      )}
 
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -547,6 +750,7 @@ const Validations = () => {
           </span>
         </div>
 
+        {/* Resident search & purok filter */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div />
           <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
@@ -572,18 +776,18 @@ const Validations = () => {
           </div>
         </div>
 
+        {/* Resident stats + filter buttons */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { key: "total",    value: stats.total,    color: "text-gray-900"    },
-              { key: "pending",  value: stats.pending,  color: "text-amber-700"   },
-              { key: "verified", value: stats.verified, color: "text-emerald-700" },
-              { key: "declined", value: stats.declined, color: "text-rose-700"    },
-            ].map(({ key, value, color }) => (
+              { key: "total",    label: "Awaiting Review", value: stats.total,    color: "text-gray-900"    },
+              { key: "pending",  label: "Pending",          value: stats.pending,  color: "text-amber-700"   },
+              { key: "declined", label: "Declined",         value: stats.declined, color: "text-rose-700"    },
+            ].map(({ key, label, value, color }) => (
               <div key={key} className="relative overflow-hidden rounded-2xl border border-white/60 bg-white/75 backdrop-blur shadow-lg">
                 <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-indigo-500/10 blur-2xl" />
                 <div className="relative p-4">
-                  <p className="text-xs font-extrabold uppercase tracking-wider text-gray-600">{key}</p>
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-gray-600">{label}</p>
                   <p className={`mt-1 text-3xl font-extrabold tracking-tight ${color}`}>{value}</p>
                 </div>
               </div>
@@ -594,20 +798,22 @@ const Validations = () => {
             <div className="rounded-2xl border border-white/60 bg-white/75 backdrop-blur shadow-lg p-4">
               <p className="text-xs font-extrabold uppercase tracking-wider text-gray-600 mb-3">Filter</p>
               <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1">
-                {["all", "pending", "verified", "declined"].map((f) => {
+                {["all", "pending", "declined"].map((f) => {
                   const active = filter === f;
                   const activeStyle =
-                    f === "verified" ? "bg-emerald-600 text-white border-emerald-600" :
                     f === "declined" ? "bg-rose-600 text-white border-rose-600" :
                     f === "pending"  ? "bg-amber-500 text-white border-amber-500" :
                     "bg-indigo-600 text-white border-indigo-600";
                   return (
-                    <button key={f} onClick={() => setFilter(f)}
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
                       className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition border ${
                         active
                           ? `${activeStyle} shadow-md`
                           : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                      }`}>
+                      }`}
+                    >
                       {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
                     </button>
                   );
@@ -631,7 +837,10 @@ const Validations = () => {
                   <thead className="bg-white sticky top-0 z-10">
                     <tr className="border-b border-gray-200">
                       {["Name", "Contact", "Purok", "Address", "Registered", "ID Verification", "Status", "Actions"].map((h) => (
-                        <th key={h} className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-gray-600 ${h === "Actions" ? "text-right" : ""}`}>
+                        <th
+                          key={h}
+                          className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-gray-600 ${h === "Actions" ? "text-right" : ""}`}
+                        >
                           {h === "Registered" ? (
                             <span className="inline-flex items-center gap-1">
                               <FiClock size={11} /> {h}
@@ -643,13 +852,19 @@ const Validations = () => {
                   </thead>
                   <tbody>
                     {paginatedResidents.map((user, idx) => (
-                      <tr key={user.id}
-                        className={`border-b border-gray-100 transition ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-indigo-50/50 cursor-pointer`}
-                        onClick={() => setSelectedUser(user)}>
+                      <tr
+                        key={user.id}
+                        className={`border-b border-gray-100 transition ${
+                          idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
+                        } hover:bg-indigo-50/50 cursor-pointer`}
+                        onClick={() => setSelectedUser(user)}
+                      >
                         <td className="px-6 py-4 font-bold text-gray-900">{user.complainant || "—"}</td>
                         <td className="px-6 py-4 text-sm font-semibold text-gray-800">{user.number || "—"}</td>
                         <td className="px-6 py-4 text-sm font-semibold text-gray-800">Purok {user.purok || "—"}</td>
-                        <td className="px-6 py-4 max-w-sm truncate text-sm text-gray-700" title={user.address || ""}>{user.address || "—"}</td>
+                        <td className="px-6 py-4 max-w-sm truncate text-sm text-gray-700" title={user.address || ""}>
+                          {user.address || "—"}
+                        </td>
                         <td className="px-6 py-4 text-xs text-gray-500 font-semibold whitespace-nowrap">
                           {formatDate(user.createdAt)}
                         </td>
@@ -670,8 +885,10 @@ const Validations = () => {
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => deleteUser(user.id)}
-                            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-extrabold border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition">
+                          <button
+                            onClick={() => deleteUser(user.id)}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-extrabold border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition"
+                          >
                             <FiTrash2 /> Delete
                           </button>
                         </td>
@@ -679,7 +896,9 @@ const Validations = () => {
                     ))}
                     {filteredUsers.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="text-center py-10 text-gray-500 font-semibold">No registrations found</td>
+                        <td colSpan={8} className="text-center py-10 text-gray-500 font-semibold">
+                          No registrations found
+                        </td>
                       </tr>
                     )}
                   </tbody>
@@ -691,7 +910,6 @@ const Validations = () => {
                 onPageChange={setResidentPage}
                 totalItems={filteredUsers.length}
                 pageSize={RESIDENT_PAGE_SIZE}
-                accent="indigo"
               />
             </>
           )}
@@ -707,13 +925,14 @@ const Validations = () => {
           <FiShield className="text-indigo-600" size={22} />
           <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight">Tanod / Employee Validations</h1>
           <span className="ml-2 px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-100 text-indigo-700 border border-indigo-200">
-            {tanods.length} Tanod{tanods.length !== 1 ? "s" : ""}
+            {tanodStats.total} Awaiting
           </span>
           <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-50 text-indigo-600 border border-indigo-200">
             <FiClock size={11} /> Newest First
           </span>
         </div>
 
+        {/* Tanod search & purok filter */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div />
           <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
@@ -739,12 +958,12 @@ const Validations = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        {/* Tanod stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { key: "total",    label: "Total Tanods", value: tanodStats.total,    color: "text-gray-900"    },
-            { key: "pending",  label: "Pending",      value: tanodStats.pending,  color: "text-amber-700"   },
-            { key: "verified", label: "Verified",     value: tanodStats.verified, color: "text-emerald-700" },
-            { key: "declined", label: "Declined",     value: tanodStats.declined, color: "text-rose-700"    },
+            { key: "total",    label: "Awaiting Review", value: tanodStats.total,    color: "text-gray-900"    },
+            { key: "pending",  label: "Pending",          value: tanodStats.pending,  color: "text-amber-700"   },
+            { key: "declined", label: "Declined",         value: tanodStats.declined, color: "text-rose-700"    },
           ].map(({ key, label, value, color }) => (
             <div key={key} className="relative overflow-hidden rounded-2xl border border-white/60 bg-white/75 backdrop-blur shadow-lg">
               <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-indigo-500/10 blur-2xl" />
@@ -770,7 +989,10 @@ const Validations = () => {
                   <thead className="bg-indigo-50 sticky top-0 z-10">
                     <tr className="border-b border-indigo-100">
                       {["Name", "Contact", "Purok", "Address", "Position", "Shift", "Registered", "ID Status", "Verification", "Actions"].map((h) => (
-                        <th key={h} className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-indigo-700 ${h === "Actions" ? "text-right" : ""}`}>
+                        <th
+                          key={h}
+                          className={`px-6 py-4 text-xs font-extrabold uppercase tracking-wider text-indigo-700 ${h === "Actions" ? "text-right" : ""}`}
+                        >
                           {h === "Registered" ? (
                             <span className="inline-flex items-center gap-1">
                               <FiClock size={11} /> {h}
@@ -781,75 +1003,91 @@ const Validations = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedTanods.map((user, idx) => (
-                      <tr
-                        key={user.id}
-                        className={`border-b border-indigo-50 transition ${idx % 2 === 0 ? "bg-white" : "bg-indigo-50/30"} hover:bg-indigo-50/70 cursor-pointer`}
-                        onClick={() => setSelectedUser(user)}
-                      >
-                        <td className="px-6 py-4 font-bold text-gray-900">
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-100 text-indigo-600">
-                              <FiShield size={13} />
+                    {paginatedTanods.map((user, idx) => {
+                      const isDeclined = user.idstatus === "declined";
+                      return (
+                        <tr
+                          key={user.id}
+                          className={`border-b border-indigo-50 transition ${
+                            idx % 2 === 0 ? "bg-white" : "bg-indigo-50/30"
+                          } hover:bg-indigo-50/70 cursor-pointer`}
+                          onClick={() => setSelectedUser(user)}
+                        >
+                          <td className="px-6 py-4 font-bold text-gray-900">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-100 text-indigo-600">
+                                <FiShield size={13} />
+                              </span>
+                              {user.complainant || "—"}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm font-semibold text-gray-800">{user.number || "—"}</td>
+                          <td className="px-6 py-4 text-sm font-semibold text-gray-800">Purok {user.purok || "—"}</td>
+                          <td className="px-6 py-4 max-w-xs truncate text-sm text-gray-700" title={user.address || ""}>
+                            {user.address || "—"}
+                          </td>
+                          <td className="px-6 py-4">
+                            {user.position ? (
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border bg-indigo-100 text-indigo-700 border-indigo-200 capitalize">
+                                {user.position}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-400">—</span>
+                            )}
+                          </td>
+                          {/* Shift — disabled if declined */}
+                          <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                            {isDeclined ? (
+                              <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-extrabold border ${shiftChip(user.shift)}`}>
+                                {shiftLabel(user.shift)}
+                              </span>
+                            ) : (
+                              <select
+                                value={user.shift || "none"}
+                                onChange={(e) => updateShift(user.id, e.target.value)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 transition ${shiftChip(user.shift)}`}
+                              >
+                                <option value="none">No Shift</option>
+                                <option value="morning">☀️ Morning</option>
+                                <option value="evening">🌙 Evening</option>
+                              </select>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-gray-500 font-semibold whitespace-nowrap">
+                            {formatDate(user.createdAt)}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border ${statusChip(user.idstatus)}`}>
+                              {statusLabel(user.idstatus)}
                             </span>
-                            {user.complainant || "—"}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-800">{user.number || "—"}</td>
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-800">Purok {user.purok || "—"}</td>
-                        <td className="px-6 py-4 max-w-xs truncate text-sm text-gray-700" title={user.address || ""}>{user.address || "—"}</td>
-                        <td className="px-6 py-4">
-                          {user.position ? (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border bg-indigo-100 text-indigo-700 border-indigo-200 capitalize">
-                              {user.position}
-                            </span>
-                          ) : (
-                            <span className="text-sm text-gray-400">—</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                          <select
-                            value={user.shift || "none"}
-                            onChange={(e) => updateShift(user.id, e.target.value)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 transition ${shiftChip(user.shift)}`}
-                          >
-                            <option value="none">No Shift</option>
-                            <option value="morning">☀️ Morning</option>
-                            <option value="evening">🌙 Evening</option>
-                          </select>
-                        </td>
-                        <td className="px-6 py-4 text-xs text-gray-500 font-semibold whitespace-nowrap">
-                          {formatDate(user.createdAt)}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold border ${statusChip(user.idstatus)}`}>
-                            {statusLabel(user.idstatus)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {user.idImage ? (
-                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-emerald-50 text-emerald-700 border-emerald-200">
-                              <FiCheck /> Sent
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-slate-100 text-slate-700 border-slate-200">
-                              <FiSlash /> None
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => deleteUser(user.id)}
-                            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-extrabold border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition"
-                          >
-                            <FiTrash2 /> Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-6 py-4">
+                            {user.idImage ? (
+                              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-emerald-50 text-emerald-700 border-emerald-200">
+                                <FiCheck /> Sent
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold border bg-slate-100 text-slate-700 border-slate-200">
+                                <FiSlash /> None
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => deleteUser(user.id)}
+                              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-extrabold border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition"
+                            >
+                              <FiTrash2 /> Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {filteredTanods.length === 0 && (
                       <tr>
-                        <td colSpan={10} className="text-center py-10 text-gray-500 font-semibold">No tanods found</td>
+                        <td colSpan={10} className="text-center py-10 text-gray-500 font-semibold">
+                          No tanods found
+                        </td>
                       </tr>
                     )}
                   </tbody>
@@ -861,24 +1099,30 @@ const Validations = () => {
                 onPageChange={setTanodPage}
                 totalItems={filteredTanods.length}
                 pageSize={TANOD_PAGE_SIZE}
-                accent="indigo"
               />
             </>
           )}
         </div>
 
-        {/* ── Detail Modal ─────────────────────────────────────────────────── */}
+        {/* ── Detail Modal ──────────────────────────────────────────────── */}
         {selectedUser && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black/35 backdrop-blur-sm z-50 p-4"
-            onClick={() => setSelectedUser(null)}>
-            <div className="bg-white rounded-[22px] w-full max-w-2xl relative shadow-2xl overflow-hidden border border-white/60"
-              onClick={(e) => e.stopPropagation()}>
-
+          <div
+            className="fixed inset-0 flex items-center justify-center bg-black/35 backdrop-blur-sm z-50 p-4"
+            onClick={() => setSelectedUser(null)}
+          >
+            <div
+              className="bg-white rounded-[22px] w-full max-w-2xl relative shadow-2xl overflow-hidden border border-white/60 max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* Modal header */}
               <div className="relative p-6 text-white bg-linear-to-r from-indigo-600 via-blue-600 to-indigo-700">
                 <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-3xl" />
-                <button className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full p-2 transition-all"
-                  onClick={() => setSelectedUser(null)}><FiX size={22} /></button>
+                <button
+                  className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full p-2 transition-all"
+                  onClick={() => setSelectedUser(null)}
+                >
+                  <FiX size={22} />
+                </button>
                 <div className="relative">
                   <div className="flex items-start gap-4">
                     {selectedUser.isEmployee && (
@@ -897,9 +1141,9 @@ const Validations = () => {
                     <div>
                       <div className="flex items-center gap-2">
                         <h2 className="text-xl md:text-2xl font-extrabold">
-                          {selectedUser.isEmployee ? "Tanod Details" : "User Details"}
+                          {selectedUser._collection === "employee" ? "Tanod Details" : "User Details"}
                         </h2>
-                        {selectedUser.isEmployee && (
+                        {selectedUser._collection === "employee" && (
                           <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-white/20 border border-white/30 ml-1">
                             <FiShield size={12} /> Tanod
                           </span>
@@ -917,17 +1161,33 @@ const Validations = () => {
               </div>
 
               <div className="p-6 space-y-5">
+                {/* Status banner */}
                 <div className={`p-4 rounded-xl border flex items-center justify-between ${statusChip(selectedUser.idstatus)}`}>
                   <span className="font-extrabold text-sm">
                     Status: {statusLabel(selectedUser.idstatus)}
                   </span>
+                  {selectedUser.disabled && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-gray-200 text-gray-700 border border-gray-300">
+                      <FiUserX size={12} /> Account Disabled
+                    </span>
+                  )}
                 </div>
+
+                {/* Decline reason display */}
+                {selectedUser.idstatus === "declined" && selectedUser.declineMessage && (
+                  <div className="p-4 rounded-xl border border-rose-200 bg-rose-50">
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-rose-600 mb-1 flex items-center gap-1">
+                      <FiAlertCircle size={12} /> Reason for Declining
+                    </p>
+                    <p className="text-sm font-semibold text-rose-800">{selectedUser.declineMessage}</p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <InfoRow label="Name"    value={selectedUser.complainant} icon={<FiUser  className="text-indigo-600"  size={18} />} tone="indigo"  />
                     <InfoRow label="Contact" value={selectedUser.number}      icon={<FiPhone className="text-emerald-600" size={18} />} tone="emerald" />
-                    <InfoRow label="Purok"   value={selectedUser.purok ? `Purok ${selectedUser.purok}` : "—"} icon={<FiMapPin className="text-amber-600" size={18} />} tone="amber"   />
+                    <InfoRow label="Purok"   value={selectedUser.purok ? `Purok ${selectedUser.purok}` : "—"} icon={<FiMapPin className="text-amber-600" size={18} />} tone="amber" />
                     <InfoRow label="Address" value={selectedUser.address}     icon={<FiHome  className="text-purple-600"  size={18} />} tone="purple"  />
                     <InfoRow
                       label="Registered"
@@ -935,7 +1195,7 @@ const Validations = () => {
                       icon={<FiClock className="text-indigo-400" size={18} />}
                       tone="indigo"
                     />
-                    {selectedUser.isEmployee && (
+                    {selectedUser._collection === "employee" && (
                       <InfoRow
                         label="Position"
                         value={selectedUser.position}
@@ -943,7 +1203,8 @@ const Validations = () => {
                         tone="indigo"
                       />
                     )}
-                    {selectedUser.isEmployee && (
+                    {/* Shift — tanod only, disabled if declined */}
+                    {selectedUser._collection === "employee" && (
                       <div className="flex items-start gap-3">
                         <div className="p-2 rounded-lg bg-amber-100">
                           {selectedUser.shift === "evening"
@@ -952,15 +1213,21 @@ const Validations = () => {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-[11px] text-gray-500 font-extrabold uppercase tracking-wider mb-1">Shift</p>
-                          <select
-                            value={selectedUser.shift || "none"}
-                            onChange={(e) => updateShift(selectedUser.id, e.target.value)}
-                            className={`w-full px-3 py-2 rounded-xl text-sm font-extrabold border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 transition ${shiftChip(selectedUser.shift)}`}
-                          >
-                            <option value="none">No Shift</option>
-                            <option value="morning">☀️ Morning Shift</option>
-                            <option value="evening">🌙 Evening Shift</option>
-                          </select>
+                          {selectedUser.idstatus === "declined" ? (
+                            <span className={`inline-flex items-center px-3 py-2 rounded-xl text-sm font-extrabold border ${shiftChip(selectedUser.shift)}`}>
+                              {shiftLabel(selectedUser.shift)}
+                            </span>
+                          ) : (
+                            <select
+                              value={selectedUser.shift || "none"}
+                              onChange={(e) => updateShift(selectedUser.id, e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl text-sm font-extrabold border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 transition ${shiftChip(selectedUser.shift)}`}
+                            >
+                              <option value="none">No Shift</option>
+                              <option value="morning">☀️ Morning Shift</option>
+                              <option value="evening">🌙 Evening Shift</option>
+                            </select>
+                          )}
                         </div>
                       </div>
                     )}
@@ -986,28 +1253,29 @@ const Validations = () => {
                   </div>
                 </div>
 
-                {/* Approve / Decline */}
-                <div className="border-t pt-4 flex gap-2">
+                {/* ── Action Buttons ──────────────────────────────────────── */}
+                <div className="border-t pt-4 space-y-3">
+                  <div className="flex gap-2">
+                    <button
+                      className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-extrabold hover:bg-emerald-700 transition shadow-md"
+                      onClick={() => approveUser(selectedUser.id)}
+                    >
+                      ✓ Approve
+                    </button>
+                    <button
+                      className="flex-1 py-3 rounded-xl bg-rose-600 text-white font-extrabold hover:bg-rose-700 transition shadow-md"
+                      onClick={() => initiateDecline(selectedUser)}
+                    >
+                      ✕ Decline
+                    </button>
+                  </div>
                   <button
-                    className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-extrabold hover:bg-emerald-700 transition shadow-md"
-                    onClick={() => updateStatus(selectedUser.id, "verified")}
+                    onClick={() => deleteUser(selectedUser.id)}
+                    className="w-full py-3 rounded-xl bg-rose-50 text-rose-700 font-extrabold border border-rose-200 hover:bg-rose-100 transition inline-flex items-center justify-center gap-2"
                   >
-                    ✓ Approve
-                  </button>
-                  <button
-                    className="flex-1 py-3 rounded-xl bg-rose-600 text-white font-extrabold hover:bg-rose-700 transition shadow-md"
-                    onClick={() => updateStatus(selectedUser.id, "declined")}
-                  >
-                    ✕ Decline
+                    <FiTrash2 /> Delete User
                   </button>
                 </div>
-
-                <button
-                  onClick={() => deleteUser(selectedUser.id)}
-                  className="w-full py-3 rounded-xl bg-rose-50 text-rose-700 font-extrabold border border-rose-200 hover:bg-rose-100 transition inline-flex items-center justify-center gap-2"
-                >
-                  <FiTrash2 /> Delete User
-                </button>
               </div>
             </div>
           </div>
@@ -1015,11 +1283,17 @@ const Validations = () => {
 
         {/* Fullscreen image preview */}
         {previewImage && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-9999"
-            onClick={() => setPreviewImage(null)}>
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-9999"
+            onClick={() => setPreviewImage(null)}
+          >
             <img src={previewImage} alt="Preview" className="max-w-[90%] max-h-[90%] rounded-lg shadow-2xl" />
-            <button className="absolute top-6 right-6 text-white text-3xl font-bold hover:scale-110 transition-transform"
-              onClick={() => setPreviewImage(null)}>✕</button>
+            <button
+              className="absolute top-6 right-6 text-white text-3xl font-bold hover:scale-110 transition-transform"
+              onClick={() => setPreviewImage(null)}
+            >
+              ✕
+            </button>
           </div>
         )}
       </div>
@@ -1029,6 +1303,7 @@ const Validations = () => {
 
 export default Validations;
 
+// ── InfoRow helper ────────────────────────────────────────────────────────────
 const InfoRow = ({ icon, label, value, tone = "indigo" }) => {
   const tones = {
     indigo:  "bg-indigo-100",
