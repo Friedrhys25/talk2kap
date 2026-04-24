@@ -134,21 +134,52 @@ const shiftLabel = (shift) => {
 
 const isValidPhoneNumber = (number) => {
   if (!/^09\d{9}$/.test(number)) return false;
-  const digits = number.slice(2);
+  const digits = number.slice(2); // 9 digits after "09"
+
+  // 1. All same digit: 09111111111
   if (/^(.)\1{8}$/.test(digits)) return false;
+
+  // 2. Fully ascending sequential: 09123456789
   const isSequentialAsc = [...digits].every(
     (d, i, arr) => i === 0 || Number(d) === Number(arr[i - 1]) + 1
   );
   if (isSequentialAsc) return false;
+
+  // 3. Fully descending sequential: 09987654321
   const isSequentialDesc = [...digits].every(
     (d, i, arr) => i === 0 || Number(d) === Number(arr[i - 1]) - 1
   );
   if (isSequentialDesc) return false;
-  const twoDigitPattern = digits.slice(0, 2);
-  if (new RegExp(`^(${twoDigitPattern}){4,}`).test(digits)) return false;
+
+  // 4. Any single digit appears 7+ times
   const digitCounts = {};
   for (const d of digits) digitCounts[d] = (digitCounts[d] || 0) + 1;
   if (Object.values(digitCounts).some((count) => count >= 7)) return false;
+
+  // 5. Repeating 2-digit chunk 3+ times anywhere: 121212xxx
+  if (/(.{2})\1{2}/.test(digits)) return false;
+
+  // 6. Repeating 3-digit chunk 2+ times anywhere: catches 09123123123, 09456456456
+  if (/(.{3})\1{1}/.test(digits)) return false;
+
+  // 7. Ascending run of 5+ consecutive digits anywhere: 12345, 23456…
+  for (let i = 0; i <= digits.length - 5; i++) {
+    const slice = digits.slice(i, i + 5);
+    const isAscSeq = [...slice].every(
+      (d, j, arr) => j === 0 || Number(d) === Number(arr[j - 1]) + 1
+    );
+    if (isAscSeq) return false;
+  }
+
+  // 8. Descending run of 5+ consecutive digits anywhere: 98765, 87654…
+  for (let i = 0; i <= digits.length - 5; i++) {
+    const slice = digits.slice(i, i + 5);
+    const isDescSeq = [...slice].every(
+      (d, j, arr) => j === 0 || Number(d) === Number(arr[j - 1]) - 1
+    );
+    if (isDescSeq) return false;
+  }
+
   return true;
 };
 
@@ -506,7 +537,7 @@ function ConfirmAddModal({ form, onConfirm, onCancel, loading }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-60 p-4"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
       onClick={onCancel}
     >
       <div
