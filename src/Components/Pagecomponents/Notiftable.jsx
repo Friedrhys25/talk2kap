@@ -4,7 +4,9 @@
 //             sets deployedTanods array + deployedTanodUid/Name on complaint
 // On resolve: clears all tanods' deployment, updates complaint status to "resolved"
 // NEW: Auto-deploy night-shift tanods for urgent complaints at night
-//      Shift tabs in Deploy Modal (Morning / Evening) with proper lock-out
+//      Shift tabs in Deploy Modal (Morning / Evening):
+//        - Both tabs are CLICKABLE for viewing
+//        - Selection is DISABLED on the off-shift tab (view-only)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import sirenAudio from "../../assets/The Purge Siren - Sound Effect for editing.mp3";
 import barangayLogo from "../../assets/sanroquelogo.png";
@@ -13,7 +15,7 @@ import {
   FiUser, FiMapPin, FiFileText, FiCalendar,
   FiCheckCircle, FiHome, FiShield, FiStar,
   FiChevronLeft, FiChevronRight, FiMoon, FiSun,
-  FiZap,
+  FiZap, FiLock,
 } from "react-icons/fi";
 import {
   collection, onSnapshot, doc, updateDoc,
@@ -207,8 +209,8 @@ const AutoDeployToast = ({ message, onDismiss }) => {
   }, [onDismiss]);
 
   return (
-    <div className="fixed top-6 right-6 z-[100] max-w-sm w-full animate-bounce-in">
-      <div className="bg-gradient-to-r from-indigo-900 to-purple-900 text-white rounded-2xl shadow-2xl border border-indigo-500/40 overflow-hidden">
+    <div className="fixed top-6 right-6 z-100 max-w-sm w-full animate-bounce-in">
+      <div className="bg-linear-to-r from-indigo-900 to-purple-900 text-white rounded-2xl shadow-2xl border border-indigo-500/40 overflow-hidden">
         <div className="flex items-start gap-3 p-4">
           <div className="bg-yellow-400 text-indigo-900 rounded-xl p-2 shrink-0 mt-0.5">
             <FiZap size={18} />
@@ -267,8 +269,8 @@ const Notiftable = () => {
   const [resolving, setResolving]                   = useState(false);
 
   // ── Auto-deploy ───────────────────────────────────────────────────────────
-  const autoDeployedKeysRef    = useRef(new Set()); // complaint keys already auto-deployed
-  const [autoDeployToast, setAutoDeployToast] = useState(null); // { message }
+  const autoDeployedKeysRef    = useRef(new Set());
+  const [autoDeployToast, setAutoDeployToast] = useState(null);
 
   // ── Audio alert ────────────────────────────────────────────────────────────
   const audioRef = useRef(null);
@@ -358,10 +360,8 @@ const Notiftable = () => {
   }, [notifications]);
 
   // ── Auto-deploy night-shift tanods for urgent + pending complaints at night ──
-  // Runs whenever notifications or tanods change.
-  // Only triggers when current time is in the evening shift window.
   useEffect(() => {
-    if (!isNightTime()) return;                        // only at night
+    if (!isNightTime()) return;
     if (tanods.length === 0) return;
 
     const urgentPending = notifications.filter(
@@ -369,7 +369,6 @@ const Notiftable = () => {
     );
     if (urgentPending.length === 0) return;
 
-    // Find all evening/night-shift tanods that are verified + available
     const nightShiftTanods = tanods.filter((t) => {
       const shift = getTanodShift(t);
       const isVerified  = (t.idstatus || "").toLowerCase() === "verified";
@@ -377,11 +376,11 @@ const Notiftable = () => {
       return isVerified && isAvailable && shift === "night";
     });
 
-    if (nightShiftTanods.length < MIN_TANODS) return; // not enough on duty
+    if (nightShiftTanods.length < MIN_TANODS) return;
 
     urgentPending.forEach(async (complaint) => {
       const key = complaint.complaintKey;
-      if (autoDeployedKeysRef.current.has(key)) return; // already handled
+      if (autoDeployedKeysRef.current.has(key)) return;
       autoDeployedKeysRef.current.add(key);
 
       try {
@@ -389,7 +388,6 @@ const Notiftable = () => {
         const deployedTanodNames = deployedTanods.map((t) => t.name).join(", ");
         const deployedAt = new Date().toISOString();
 
-        // Update complaint
         await updateDoc(
           doc(firestore, "users", complaint.userId, "userComplaints", complaint.complaintKey),
           {
@@ -400,7 +398,6 @@ const Notiftable = () => {
           }
         );
 
-        // Update each tanod
         for (const { uid, name } of deployedTanods) {
           const coDeployedTanods = deployedTanods.filter((t) => t.uid !== uid);
           await updateDoc(doc(firestore, "employee", uid), {
@@ -418,7 +415,6 @@ const Notiftable = () => {
           });
         }
 
-        // Update local state
         const patch = (c) =>
           c.complaintKey === key
             ? { ...c, deployedTanods, deployedTanodUid: deployedTanods[0].uid, deployedTanodName: deployedTanodNames, status: "in-progress" }
@@ -431,7 +427,7 @@ const Notiftable = () => {
         });
       } catch (err) {
         console.error("Auto-deploy failed:", err);
-        autoDeployedKeysRef.current.delete(key); // allow retry
+        autoDeployedKeysRef.current.delete(key);
       }
     });
   }, [notifications, tanods]);
@@ -517,7 +513,6 @@ const Notiftable = () => {
 
   // ── Deploy tanod ──────────────────────────────────────────────────────────
   const openDeployModal = (complaint) => {
-    const shift = getCurrentShift();
     setDeployTarget(complaint);
     setSelectedTanods(new Set());
     setTanodSearch("");
@@ -534,6 +529,12 @@ const Notiftable = () => {
       return next;
     });
   };
+
+  // currentShift for deploy modal logic
+  const currentShift = getCurrentShift();
+
+  // Whether the currently viewed tab is the active shift (selection allowed)
+  const isViewingActiveShift = deployShiftTab === currentShift;
 
   // Tanods filtered by shift tab + search + verified
   const filteredTanods = useMemo(() => {
@@ -557,15 +558,20 @@ const Notiftable = () => {
     tanodPage * TANODS_PER_PAGE
   );
 
-  // Clear selected tanods when shift tab changes (avoid cross-shift selection)
+  // Tab switch: always allowed for viewing; clears selection when switching away from active shift
   const handleShiftTabChange = (tab) => {
     setDeployShiftTab(tab);
+    // Clear any selections made on the active shift tab when switching to view-only tab
+    // (or reset when coming back)
     setSelectedTanods(new Set());
     setTanodPage(1);
   };
 
   const confirmDeploy = async () => {
     if (selectedTanods.size < MIN_TANODS || !deployTarget) return;
+    // Guard: only allow deploying from the active shift tab
+    if (!isViewingActiveShift) return;
+
     const unapproved = [];
     for (const uid of selectedTanods) {
       const t = tanods.find((x) => x.uid === uid);
@@ -695,8 +701,7 @@ const Notiftable = () => {
     : "bg-gray-400 cursor-not-allowed";
 
   // ── Current shift badge ───────────────────────────────────────────────────
-  const currentShift   = getCurrentShift();
-  const nightNow       = currentShift === "night";
+  const nightNow = currentShift === "night";
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -1036,44 +1041,58 @@ const Notiftable = () => {
                   </p>
                 </div>
 
-                {/* ── Shift Tabs ── */}
+                {/* ── Shift Tabs ── Both clickable; off-shift is view-only */}
                 <div className="flex rounded-xl overflow-hidden border border-gray-200 bg-gray-100 p-1 gap-1">
                   {[
-                    { key: "day",   label: "Day Shift",   icon: <FiSun  size={14} />, locked: currentShift === "night" },
-                    { key: "night", label: "Night Shift", icon: <FiMoon size={14} />, locked: currentShift === "day"   },
-                  ].map(({ key, label, icon, locked }) => (
-                    <button
-                      key={key}
-                      onClick={() => !locked && handleShiftTabChange(key)}
-                      disabled={locked}
-                      title={locked ? `Cannot select ${label} tanods during ${currentShift} shift` : ""}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                        deployShiftTab === key
-                          ? key === "day"
-                            ? "bg-amber-500 text-white shadow-md"
-                            : "bg-indigo-700 text-white shadow-md"
-                          : locked
-                          ? "text-gray-300 cursor-not-allowed"
-                          : "text-gray-600 hover:bg-white hover:text-gray-900"
-                      }`}
-                    >
-                      {icon}
-                      {label}
-                      {locked && (
-                        <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-400 ml-1">
-                          Locked
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                    { key: "day",   label: "Day Shift",   icon: <FiSun  size={14} /> },
+                    { key: "night", label: "Night Shift", icon: <FiMoon size={14} /> },
+                  ].map(({ key, label, icon }) => {
+                    const isActive  = deployShiftTab === key;
+                    const isOffShift = key !== currentShift; // viewing the non-active shift
+
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => handleShiftTabChange(key)}
+                        title={isOffShift ? `Viewing ${label} tanods — selection disabled (not current shift)` : `${label} is active`}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                          isActive
+                            ? key === "day"
+                              ? "bg-amber-500 text-white shadow-md"
+                              : "bg-indigo-700 text-white shadow-md"
+                            : "text-gray-600 hover:bg-white hover:text-gray-900"
+                        }`}
+                      >
+                        {icon}
+                        {label}
+                        {isOffShift && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-500 ml-1">
+                            
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Shift context hint */}
-                <p className="text-[11px] font-semibold text-gray-500 -mt-1">
-                  {currentShift === "day"
-                    ? "🌅 Day shift active (8 AM – 5 PM). Night shift tab is locked."
-                    : "🌙 Night shift active (7 PM – 5 AM). Day shift tab is locked."}
-                </p>
+                {isViewingActiveShift ? (
+                  <p className="text-[11px] font-semibold text-gray-500 -mt-1">
+                    {currentShift === "day"
+                      ? "🌅 Day shift active. You can select and deploy day-shift tanods."
+                      : "🌙 Night shift active. You can select and deploy night-shift tanods."}
+                  </p>
+                ) : (
+                  <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 -mt-1">
+                    <FiLock size={13} className="text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-[11px] font-bold text-amber-700">
+                      You are viewing {deployShiftTab === "day" ? "day" : "night"}-shift tanods for reference only.
+                      Deployment is disabled for the off-shift list.
+                      Switch back to the{" "}
+                      <span className="font-extrabold">{currentShift === "day" ? "Day" : "Night"} Shift</span> tab to deploy.
+                    </p>
+                  </div>
+                )}
 
                 {/* Error */}
                 {deployError && (
@@ -1093,8 +1112,8 @@ const Notiftable = () => {
                       onChange={(e) => { setTanodSearch(e.target.value); setTanodPage(1); }}
                     />
                   </div>
-                  {/* Select All button */}
-                  {filteredTanods.length > 0 && (() => {
+                  {/* Select All — only shown on the active shift tab */}
+                  {isViewingActiveShift && filteredTanods.length > 0 && (() => {
                     const availableUids = filteredTanods
                       .filter((t) => t.deploymentStatus !== "deployed")
                       .map((t) => t.uid);
@@ -1141,7 +1160,13 @@ const Notiftable = () => {
                       <table className="w-full text-left">
                         <thead>
                           <tr className="bg-slate-50 border-b border-gray-200">
-                            <th className="px-4 py-3 w-8"></th>
+                            {/* Checkbox column header — only shown on active shift */}
+                            {isViewingActiveShift && <th className="px-4 py-3 w-8"></th>}
+                            {!isViewingActiveShift && (
+                              <th className="px-4 py-3 w-8">
+                                <FiLock size={13} className="text-gray-300" title="View only" />
+                              </th>
+                            )}
                             <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider">Name</th>
                             <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider">Role</th>
                             <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider">Shift</th>
@@ -1150,22 +1175,34 @@ const Notiftable = () => {
                         </thead>
                         <tbody>
                           {paginatedTanods.map((t) => {
-                            const isDeployed = t.deploymentStatus === "deployed";
-                            const isSelected = selectedTanods.has(t.uid);
-                            const tanodShift = getTanodShift(t);
+                            const isDeployed  = t.deploymentStatus === "deployed";
+                            const isSelected  = selectedTanods.has(t.uid);
+                            const tanodShift  = getTanodShift(t);
+                            // Rows are non-interactive when viewing the off-shift tab
+                            const canSelect   = isViewingActiveShift && !isDeployed;
+                            // A tanod is "off shift" when we're viewing the opposite shift tab
+                            const isOffShiftRow = !isViewingActiveShift;
+
                             return (
                               <tr key={t.uid}
-                                onClick={() => { if (!isDeployed) toggleTanod(t.uid); }}
+                                onClick={() => { if (canSelect) toggleTanod(t.uid); }}
                                 className={`border-b border-gray-100 transition ${
-                                  isDeployed
+                                  isOffShiftRow
+                                    ? "opacity-60 cursor-default bg-gray-50/60"
+                                    : isDeployed
                                     ? "opacity-50 cursor-not-allowed bg-gray-50"
                                     : isSelected
                                     ? "bg-indigo-50 ring-1 ring-indigo-300 cursor-pointer"
                                     : "hover:bg-gray-50 cursor-pointer"
                                 }`}>
                                 <td className="px-4 py-3">
-                                  <input type="checkbox" checked={isSelected} disabled={isDeployed}
-                                    onChange={() => toggleTanod(t.uid)} className="accent-indigo-600 w-4 h-4" />
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    disabled={!canSelect}
+                                    onChange={() => { if (canSelect) toggleTanod(t.uid); }}
+                                    className={`w-4 h-4 ${canSelect ? "accent-indigo-600 cursor-pointer" : "cursor-not-allowed opacity-30"}`}
+                                  />
                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="flex items-center gap-2">
@@ -1190,11 +1227,13 @@ const Notiftable = () => {
                                 </td>
                                 <td className="px-4 py-3">
                                   <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
-                                    isDeployed
+                                    isOffShiftRow
+                                      ? "bg-gray-100 text-gray-500 ring-1 ring-gray-200"
+                                      : isDeployed
                                       ? "bg-red-100 text-red-700 ring-1 ring-red-200"
                                       : "bg-green-100 text-green-700 ring-1 ring-green-200"
                                   }`}>
-                                    {isDeployed ? "Deployed" : "Available"}
+                                    {isOffShiftRow ? "Off Shift" : isDeployed ? "Deployed" : "Available"}
                                   </span>
                                 </td>
                               </tr>
@@ -1227,7 +1266,8 @@ const Notiftable = () => {
 
               {/* Footer */}
               <div className="border-t px-6 py-4 bg-slate-50 space-y-3 shrink-0">
-                {selectedTanods.size > 0 && (
+                {/* Selected chips — only shown when on active shift */}
+                {isViewingActiveShift && selectedTanods.size > 0 && (
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-bold text-gray-600">Selected ({selectedTanods.size}):</span>
                     {[...selectedTanods].map((uid) => {
@@ -1241,21 +1281,29 @@ const Notiftable = () => {
                     })}
                   </div>
                 )}
-                {selectedTanods.size > 0 && selectedTanods.size < MIN_TANODS && (
+                {isViewingActiveShift && selectedTanods.size > 0 && selectedTanods.size < MIN_TANODS && (
                   <p className="text-xs font-bold text-amber-600">Select at least {MIN_TANODS} tanods to deploy.</p>
                 )}
+
                 <div className="flex gap-3">
                   <button onClick={() => { setShowDeployModal(false); setDeployError(""); }}
                     className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition">
                     Cancel
                   </button>
-                  <button onClick={confirmDeploy} disabled={selectedTanods.size < MIN_TANODS || deploying}
+                  <button
+                    onClick={confirmDeploy}
+                    disabled={!isViewingActiveShift || selectedTanods.size < MIN_TANODS || deploying}
+                    title={!isViewingActiveShift ? `Switch to the ${currentShift} shift tab to deploy` : ""}
                     className={`flex-1 py-3 rounded-xl text-white font-extrabold text-sm transition shadow-md ${
-                      selectedTanods.size < MIN_TANODS || deploying
+                      !isViewingActiveShift || selectedTanods.size < MIN_TANODS || deploying
                         ? "bg-gray-300 cursor-not-allowed"
                         : "bg-indigo-600 hover:bg-indigo-700"
                     }`}>
-                    {deploying ? "Deploying…" : `Deploy ${selectedTanods.size} Tanod${selectedTanods.size !== 1 ? "s" : ""} →`}
+                    {deploying
+                      ? "Deploying…"
+                      : !isViewingActiveShift
+                      ? `🔒 View Only`
+                      : `Deploy ${selectedTanods.size} Tanod${selectedTanods.size !== 1 ? "s" : ""} →`}
                   </button>
                 </div>
               </div>

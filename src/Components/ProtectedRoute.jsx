@@ -22,7 +22,7 @@ const modalVariants = {
 const LogoutModal = ({ isOpen, onClose, onConfirm }) => (
   <AnimatePresence>
     {isOpen && (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-9999 flex items-center justify-center p-4">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -42,7 +42,7 @@ const LogoutModal = ({ isOpen, onClose, onConfirm }) => (
           className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/60 bg-white/80 backdrop-blur-xl shadow-2xl"
         >
           {/* Header */}
-          <div className="relative p-6 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white">
+          <div className="relative p-6 bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white">
             <button
               onClick={onClose}
               className="absolute top-4 right-4 text-white/80 hover:text-white hover:bg-white/10 rounded-full p-2 transition"
