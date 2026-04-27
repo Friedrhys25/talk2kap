@@ -1,4 +1,4 @@
-// Sidebarui.jsx - Updated with Emergency Hotlines + User List
+// Sidebarui.jsx - Updated with Emergency Hotlines + User List + Page Persistence on Reload
 import React, { useState, useEffect, useRef } from "react";
 import {
   FiAlertCircle, FiMail, FiArrowLeftCircle, FiChevronsRight,
@@ -52,18 +52,25 @@ const optionVariants = {
 
 /* ── Page wrapper ────────────────────────────────────────────────────────────*/
 export const Example = () => {
-  const [selected, setSelected] = useState("Dashboard");
+  // ✅ FIX: Read from sessionStorage on mount so page survives reload
+  const [selected, setSelected] = useState(() => {
+    return sessionStorage.getItem("activePage") || "Dashboard";
+  });
+
   const [pendingComplaintsCount, setPendingComplaintsCount] = useState(0);
   const [pendingValidationsCount, setPendingValidationsCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const audioRef = useRef(null);
 
+  // ✅ FIX: Wrapper that saves to sessionStorage before updating state
+  const handleSetSelected = (page) => {
+    sessionStorage.setItem("activePage", page);
+    setSelected(page);
+  };
+
   // Track the highest urgent+pending count seen this session.
-  // The siren fires once when the count RISES above the last known peak.
-  // It will only be eligible to fire again when the count drops back to 0
-  // (i.e. all urgent complaints were resolved) AND then rises again.
-  const previousUrgentPendingCountRef = useRef(0); // last recalc value
-  const sirenFiredForPeakRef = useRef(0);           // the count level we already fired at
+  const previousUrgentPendingCountRef = useRef(0);
+  const sirenFiredForPeakRef = useRef(0);
 
   // ── Firestore listeners ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -71,13 +78,12 @@ export const Example = () => {
     const employeeRef = collection(firestore, "employee");
     const innerUnsubs = [];
 
-    const complaintsMap   = {};  // userId → { count, urgentPendingCount }
+    const complaintsMap   = {};
     const validationMap   = {};
     const tanodValidationMap = {};
     const messagesMap     = {};
 
     const recalc = () => {
-      // Total pending (all urgencies) — used for sidebar badge
       const newComplaintsCount = Object.values(complaintsMap)
         .reduce((a, b) => a + (b.count || 0), 0);
       setPendingComplaintsCount(newComplaintsCount);
@@ -91,16 +97,10 @@ export const Example = () => {
       const newUrgentPendingCount = Object.values(complaintsMap)
         .reduce((a, b) => a + (b.urgentPending || 0), 0);
 
-      // When count drops to 0, reset so the siren can fire again next time
-      // a NEW urgent complaint arrives.
       if (newUrgentPendingCount === 0) {
         sirenFiredForPeakRef.current = 0;
       }
 
-      // Fire siren ONLY when:
-      //   1. There are urgent+pending complaints right now, AND
-      //   2. The current count is strictly higher than the level we already
-      //      fired for (prevents re-firing on page/tab navigation or re-renders)
       if (
         newUrgentPendingCount > 0 &&
         newUrgentPendingCount > sirenFiredForPeakRef.current
@@ -167,7 +167,6 @@ export const Example = () => {
             innerUnsubs.push(unsubChat);
           });
 
-          // Store both counts per user
           complaintsMap[userId] = { count: pendingCount, urgentPending: urgentPendingCount };
           recalc();
         });
@@ -207,7 +206,7 @@ export const Example = () => {
       <div className="relative z-10 flex w-full h-full">
         <Sidebar
           selected={selected}
-          setSelected={setSelected}
+          setSelected={handleSetSelected}  
           pendingComplaintsCount={pendingComplaintsCount}
           pendingValidationsCount={pendingValidationsCount}
           unreadMessagesCount={unreadMessagesCount}
@@ -274,6 +273,8 @@ const Sidebar = ({ selected, setSelected, pendingComplaintsCount, pendingValidat
   const navigate = useNavigate();
 
   const confirmLogout = () => {
+    // ✅ Also clear sessionStorage on logout so next login starts fresh
+    sessionStorage.removeItem("activePage");
     localStorage.removeItem("isLoggedIn");
     setShowLogoutModal(false);
     navigate("/");
