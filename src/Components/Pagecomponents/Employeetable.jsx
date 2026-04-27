@@ -28,6 +28,7 @@ import {
   FiBriefcase,
   FiX,
   FiUserX,
+  FiAlertTriangle,
 } from "react-icons/fi";
 import {
   collection,
@@ -80,6 +81,8 @@ const positionOptions = [
   "BANTAY BAYAN/DRIVER",
   "LUPON TAGAPAMAYAPA",
 ];
+
+const suffixOptions = ["", "Jr.", "Sr.", "II", "III", "IV", "V"];
 
 const VALID_EMAIL_DOMAINS = [
   "gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com",
@@ -134,35 +137,21 @@ const shiftLabel = (shift) => {
 
 const isValidPhoneNumber = (number) => {
   if (!/^09\d{9}$/.test(number)) return false;
-  const digits = number.slice(2); // 9 digits after "09"
-
-  // 1. All same digit: 09111111111
+  const digits = number.slice(2);
   if (/^(.)\1{8}$/.test(digits)) return false;
-
-  // 2. Fully ascending sequential: 09123456789
   const isSequentialAsc = [...digits].every(
     (d, i, arr) => i === 0 || Number(d) === Number(arr[i - 1]) + 1
   );
   if (isSequentialAsc) return false;
-
-  // 3. Fully descending sequential: 09987654321
   const isSequentialDesc = [...digits].every(
     (d, i, arr) => i === 0 || Number(d) === Number(arr[i - 1]) - 1
   );
   if (isSequentialDesc) return false;
-
-  // 4. Any single digit appears 7+ times
   const digitCounts = {};
   for (const d of digits) digitCounts[d] = (digitCounts[d] || 0) + 1;
   if (Object.values(digitCounts).some((count) => count >= 7)) return false;
-
-  // 5. Repeating 2-digit chunk 3+ times anywhere: 121212xxx
   if (/(.{2})\1{2}/.test(digits)) return false;
-
-  // 6. Repeating 3-digit chunk 2+ times anywhere: catches 09123123123, 09456456456
   if (/(.{3})\1{1}/.test(digits)) return false;
-
-  // 7. Ascending run of 5+ consecutive digits anywhere: 12345, 23456…
   for (let i = 0; i <= digits.length - 5; i++) {
     const slice = digits.slice(i, i + 5);
     const isAscSeq = [...slice].every(
@@ -170,8 +159,6 @@ const isValidPhoneNumber = (number) => {
     );
     if (isAscSeq) return false;
   }
-
-  // 8. Descending run of 5+ consecutive digits anywhere: 98765, 87654…
   for (let i = 0; i <= digits.length - 5; i++) {
     const slice = digits.slice(i, i + 5);
     const isDescSeq = [...slice].every(
@@ -179,7 +166,6 @@ const isValidPhoneNumber = (number) => {
     );
     if (isDescSeq) return false;
   }
-
   return true;
 };
 
@@ -191,6 +177,129 @@ const getPhoneError = (number) => {
   if (!isValidPhoneNumber(number)) return "Invalid number — avoid repeating or sequential digits (e.g. 09111111111, 09123456789).";
   return null;
 };
+
+// ── Error / Alert Modal ───────────────────────────────────────────────────────
+function ErrorModal({ open, onClose, title, message, type = "error" }) {
+  if (!open) return null;
+
+  const config = {
+    error: {
+      accent: "bg-rose-500",
+      icon: "bg-rose-100 text-rose-600",
+      btn: "bg-rose-600 hover:bg-rose-700 text-white",
+      border: "border-rose-100",
+      Icon: FiAlertCircle,
+    },
+    warning: {
+      accent: "bg-amber-500",
+      icon: "bg-amber-100 text-amber-600",
+      btn: "bg-amber-600 hover:bg-amber-700 text-white",
+      border: "border-amber-100",
+      Icon: FiAlertTriangle,
+    },
+  };
+  const c = config[type] || config.error;
+
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-[9999] p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-white/60 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Accent bar */}
+        <div className={`h-1 w-full ${c.accent}`} />
+
+        <div className="p-6 space-y-4">
+          {/* Icon + content */}
+          <div className="flex items-start gap-4">
+            <div className={`p-3 rounded-xl ${c.icon} shrink-0`}>
+              <c.Icon size={22} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-extrabold text-gray-900">{title}</h3>
+              <p className="text-sm text-gray-500 font-medium mt-1 leading-relaxed">{message}</p>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className={`border-t ${c.border}`} />
+
+          {/* Action */}
+          <button
+            onClick={onClose}
+            className={`w-full py-2.5 rounded-xl font-extrabold text-sm transition shadow-md ${c.btn}`}
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Confirm Modal ─────────────────────────────────────────────────────────────
+function ConfirmModal({ open, onClose, onConfirm, title, message, confirmLabel, confirmColor = "rose" }) {
+  if (!open) return null;
+
+  const colorMap = {
+    rose: {
+      accent: "bg-rose-500",
+      icon: "bg-rose-100 text-rose-600",
+      btn: "bg-rose-600 hover:bg-rose-700 text-white",
+      border: "border-rose-200",
+    },
+    gray: {
+      accent: "bg-gray-500",
+      icon: "bg-gray-100 text-gray-600",
+      btn: "bg-gray-700 hover:bg-gray-800 text-white",
+      border: "border-gray-200",
+    },
+  };
+  const colors = colorMap[confirmColor] || colorMap.rose;
+
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-[9999] p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-white/60 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className={`h-1 w-full ${colors.accent}`} />
+        <div className="p-6 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-xl ${colors.icon} shrink-0`}>
+              <FiAlertTriangle size={22} />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-gray-900">{title}</h3>
+              <p className="text-sm text-gray-500 font-medium mt-0.5">{message}</p>
+            </div>
+          </div>
+          <div className={`border-t ${colors.border}`} />
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 font-extrabold text-sm hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { onConfirm(); onClose(); }}
+              className={`flex-1 py-2.5 rounded-xl font-extrabold text-sm transition shadow-md ${colors.btn}`}
+            >
+              {confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── InfoRow helper ────────────────────────────────────────────────────────────
 function InfoRow({ icon, label, value, tone = "indigo" }) {
@@ -217,6 +326,8 @@ function InfoRow({ icon, label, value, tone = "indigo" }) {
 // ── Employee Detail Modal ─────────────────────────────────────────────────────
 function EmployeeDetailModal({ employee, onClose, onEdit, onDelete, onDisable }) {
   const [previewImage, setPreviewImage] = useState(null);
+  const [confirmDisable, setConfirmDisable] = useState(false);
+  const [confirmDelete, setConfirmDelete]   = useState(false);
 
   if (!employee) return null;
 
@@ -270,44 +381,29 @@ function EmployeeDetailModal({ employee, onClose, onEdit, onDelete, onDisable })
           <div className="relative overflow-hidden bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 p-6 shrink-0">
             <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
             <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
-
-            <button
-              onClick={onClose}
-              className="absolute top-4 right-4 text-white/80 hover:text-white rounded-full p-2 hover:bg-white/10 transition z-10"
-            >
+            <button onClick={onClose} className="absolute top-4 right-4 text-white/80 hover:text-white rounded-full p-2 hover:bg-white/10 transition z-10">
               <FiX size={22} />
             </button>
-
             <div className="relative flex items-start gap-5">
-              {/* Avatar */}
               <div
                 className="w-24 h-24 rounded-2xl bg-white/15 border-2 border-white/30 flex items-center justify-center shrink-0 shadow-lg overflow-hidden cursor-pointer"
                 onClick={() => employee.avatar && setPreviewImage(employee.avatar)}
               >
                 {employee.avatar ? (
-                  <img
-                    src={employee.avatar}
-                    alt={fullName}
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={employee.avatar} alt={fullName} className="w-full h-full object-cover" />
                 ) : (
                   <FiUser className="text-white" size={38} />
                 )}
               </div>
-
               <div className="min-w-0 flex-1">
                 <h2 className="text-2xl font-extrabold text-white truncate">{fullName || "—"}</h2>
                 <p className="text-indigo-200 text-sm font-semibold mt-1">{employee.position || "—"}</p>
-
-                {/* Shift badge */}
                 <div className="mt-2">
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-extrabold rounded-full border ${shiftChip(employee.shift)}`}>
                     {employee.shift === "morning" ? <FiSun size={11} /> : employee.shift === "evening" ? <FiMoon size={11} /> : null}
                     {shiftLabel(employee.shift)}
                   </span>
                 </div>
-
-                {/* Rating summary */}
                 <div className="mt-3 inline-flex items-center gap-3 bg-white/15 border border-white/20 rounded-2xl px-4 py-2.5">
                   <div>
                     <p className="text-white/70 text-[10px] font-extrabold uppercase tracking-wider">Avg. Rating</p>
@@ -324,7 +420,6 @@ function EmployeeDetailModal({ employee, onClose, onEdit, onDelete, onDisable })
                     <p className="text-2xl font-extrabold text-white mt-0.5">{employee.feedbacks?.length ?? 0}</p>
                   </div>
                 </div>
-
                 {avgRating !== null && (
                   <div className="mt-2">
                     <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-extrabold rounded-full border ${getRatingBadge(avgRating)}`}>
@@ -339,8 +434,6 @@ function EmployeeDetailModal({ employee, onClose, onEdit, onDelete, onDisable })
 
           {/* Body */}
           <div className="p-6 overflow-y-auto flex-1 space-y-5 bg-linear-to-b from-white to-slate-50">
-
-            {/* Account Credentials */}
             <div>
               <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-1.5">
                 <FiMail size={12} /> Account Credentials
@@ -358,59 +451,30 @@ function EmployeeDetailModal({ employee, onClose, onEdit, onDelete, onDisable })
               </div>
             </div>
 
-            {/* Personal Information */}
             <div>
               <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-1.5">
                 <FiUser size={12} /> Personal Information
               </p>
               <div className="space-y-3">
-                <InfoRow
-                  label="Full Name"
-                  value={fullName}
-                  icon={<FiUser className="text-indigo-600" size={16} />}
-                  tone="indigo"
-                />
-                <InfoRow
-                  label="Contact Number"
-                  value={employee.number}
-                  icon={<FiPhone className="text-emerald-600" size={16} />}
-                  tone="emerald"
-                />
-                <InfoRow
-                  label="Purok"
-                  value={employee.purok ? `Purok ${employee.purok}` : "—"}
-                  icon={<FiMapPin className="text-amber-600" size={16} />}
-                  tone="amber"
-                />
-                <InfoRow
-                  label="Address"
-                  value={employee.address}
-                  icon={<FiHome className="text-purple-600" size={16} />}
-                  tone="purple"
-                />
+                <InfoRow label="Full Name" value={fullName} icon={<FiUser className="text-indigo-600" size={16} />} tone="indigo" />
+                <InfoRow label="Contact Number" value={employee.number} icon={<FiPhone className="text-emerald-600" size={16} />} tone="emerald" />
+                <InfoRow label="Purok" value={employee.purok ? `Purok ${employee.purok}` : "—"} icon={<FiMapPin className="text-amber-600" size={16} />} tone="amber" />
+                <InfoRow label="Address" value={employee.address} icon={<FiHome className="text-purple-600" size={16} />} tone="purple" />
               </div>
             </div>
 
-            {/* Work Information */}
             <div>
               <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-1.5">
                 <FiBriefcase size={12} /> Work Information
               </p>
               <div className="space-y-3">
-                <InfoRow
-                  label="Position"
-                  value={employee.position}
-                  icon={<FiBriefcase className="text-blue-600" size={16} />}
-                  tone="blue"
-                />
+                <InfoRow label="Position" value={employee.position} icon={<FiBriefcase className="text-blue-600" size={16} />} tone="blue" />
                 <InfoRow
                   label="Shift"
                   value={shiftLabel(employee.shift)}
                   icon={employee.shift === "morning" ? <FiSun className="text-amber-600" size={16} /> : <FiMoon className="text-indigo-600" size={16} />}
                   tone={employee.shift === "morning" ? "amber" : "indigo"}
                 />
-
-                {/* Account Status row */}
                 {employee.disabled && (
                   <div className="flex items-start gap-3">
                     <div className="p-2 rounded-lg bg-gray-100 shrink-0">
@@ -427,18 +491,15 @@ function EmployeeDetailModal({ employee, onClose, onEdit, onDelete, onDisable })
 
             {/* Actions */}
             <div className="border-t pt-4 space-y-3">
-              {/* Edit — full width on top */}
               <button
                 onClick={() => { onClose(); onEdit(employee); }}
                 className="w-full py-3 rounded-xl bg-indigo-600 text-white font-extrabold hover:bg-indigo-700 transition shadow-md inline-flex items-center justify-center gap-2 text-sm"
               >
                 <FiEdit2 size={15} /> Edit Employee
               </button>
-
-              {/* Disable Account + Delete side by side */}
               <div className="flex gap-3">
                 <button
-                  onClick={() => onDisable(employee.id)}
+                  onClick={() => setConfirmDisable(true)}
                   disabled={!!employee.disabled}
                   className={`flex-1 py-3 rounded-xl font-extrabold transition inline-flex items-center justify-center gap-2 text-sm ${
                     employee.disabled
@@ -450,17 +511,13 @@ function EmployeeDetailModal({ employee, onClose, onEdit, onDelete, onDisable })
                   {employee.disabled ? "Disabled" : "Disable Account"}
                 </button>
                 <button
-                  onClick={() => { onDelete(employee.id); onClose(); }}
+                  onClick={() => setConfirmDelete(true)}
                   className="flex-1 py-3 rounded-xl bg-rose-50 text-rose-700 font-extrabold border border-rose-200 hover:bg-rose-100 transition inline-flex items-center justify-center gap-2 text-sm"
                 >
                   <FiTrash2 size={15} /> Delete
                 </button>
               </div>
-
-              <button
-                onClick={onClose}
-                className="w-full py-3 rounded-xl bg-slate-100 text-slate-700 font-extrabold hover:bg-slate-200 transition text-sm"
-              >
+              <button onClick={onClose} className="w-full py-3 rounded-xl bg-slate-100 text-slate-700 font-extrabold hover:bg-slate-200 transition text-sm">
                 Close
               </button>
             </div>
@@ -470,23 +527,33 @@ function EmployeeDetailModal({ employee, onClose, onEdit, onDelete, onDisable })
 
       {/* Fullscreen image preview */}
       {previewImage && (
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-9999"
-          onClick={() => setPreviewImage(null)}
-        >
-          <img
-            src={previewImage}
-            alt="Preview"
-            className="max-w-[90%] max-h-[90%] rounded-2xl shadow-2xl"
-          />
-          <button
-            className="absolute top-6 right-6 text-white text-3xl font-bold hover:scale-110 transition-transform"
-            onClick={() => setPreviewImage(null)}
-          >
-            ✕
-          </button>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[9999]" onClick={() => setPreviewImage(null)}>
+          <img src={previewImage} alt="Preview" className="max-w-[90%] max-h-[90%] rounded-2xl shadow-2xl" />
+          <button className="absolute top-6 right-6 text-white text-3xl font-bold hover:scale-110 transition-transform" onClick={() => setPreviewImage(null)}>✕</button>
         </div>
       )}
+
+      {/* Disable confirmation */}
+      <ConfirmModal
+        open={confirmDisable}
+        onClose={() => setConfirmDisable(false)}
+        onConfirm={() => onDisable(employee.id)}
+        title="Disable Account"
+        message="This employee will no longer be able to log in. You can review this action later."
+        confirmLabel="Yes, Disable"
+        confirmColor="gray"
+      />
+
+      {/* Delete confirmation */}
+      <ConfirmModal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => { onDelete(employee.id); onClose(); }}
+        title="Delete Employee"
+        message="This will permanently remove the employee record. This action cannot be undone."
+        confirmLabel="Yes, Delete"
+        confirmColor="rose"
+      />
     </>
   );
 }
@@ -499,7 +566,7 @@ function SuccessToast({ message, onClose }) {
   }, [onClose]);
 
   return (
-    <div className="fixed top-6 right-6 z-9999 animate-[slideInRight_0.4s_ease-out]">
+    <div className="fixed top-6 right-6 z-[9999] animate-[slideInRight_0.4s_ease-out]">
       <style>{`
         @keyframes slideInRight {
           from { opacity: 0; transform: translateX(60px); }
@@ -531,74 +598,43 @@ function ConfirmAddModal({ form, onConfirm, onCancel, loading }) {
     form.middleInitial?.trim() ? `${form.middleInitial.trim().replace(/\.?$/, "")}.` : "",
     form.lastName,
     form.suffix,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].filter(Boolean).join(" ");
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative border border-white/60 overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={onCancel}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative border border-white/60 overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="h-1.5 w-full bg-linear-to-r from-indigo-500 via-purple-500 to-indigo-600" />
-
         <div className="p-7">
           <div className="flex items-center gap-3 mb-1">
             <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center">
               <FiAlertCircle size={20} className="text-indigo-600" />
             </div>
-            <h2 className="text-lg font-extrabold text-gray-900">
-              Confirm Employee Creation
-            </h2>
+            <h2 className="text-lg font-extrabold text-gray-900">Confirm Employee Creation</h2>
           </div>
-          <p className="text-sm text-gray-500 font-semibold mb-5 pl-[52px]">
-            Please review the details before confirming.
-          </p>
+          <p className="text-sm text-gray-500 font-semibold mb-5 pl-[52px]">Please review the details before confirming.</p>
 
           <div className="bg-gray-50 rounded-2xl border border-gray-100 divide-y divide-gray-100 mb-6">
-            <div className="px-5 py-3.5">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">Full Name</p>
-              <p className="text-sm font-extrabold text-gray-900">{fullName || "—"}</p>
-            </div>
-            <div className="px-5 py-3.5">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">Position</p>
-              <p className="text-sm font-extrabold text-gray-900">{form.position}</p>
-            </div>
-            <div className="px-5 py-3.5">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">Shift</p>
-              <p className="text-sm font-extrabold text-gray-900">{shiftLabel(form.shift)}</p>
-            </div>
-            <div className="px-5 py-3.5">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">Phone Number</p>
-              <p className="text-sm font-extrabold text-gray-900">{form.number || "—"}</p>
-            </div>
-            <div className="px-5 py-3.5">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">Purok</p>
-              <p className="text-sm font-extrabold text-gray-900">{form.purok || "—"}</p>
-            </div>
-            <div className="px-5 py-3.5">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">Address</p>
-              <p className="text-sm font-extrabold text-gray-900">{form.address || "—"}</p>
-            </div>
-            <div className="px-5 py-3.5">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">Login Email</p>
-              <p className="text-sm font-extrabold text-gray-900">{form.email || "—"}</p>
-            </div>
+            {[
+              { label: "Full Name", value: fullName || "—" },
+              { label: "Position", value: form.position },
+              { label: "Shift", value: shiftLabel(form.shift) },
+              { label: "Phone Number", value: form.number || "—" },
+              { label: "Purok", value: form.purok || "—" },
+              { label: "Address", value: form.address || "—" },
+              { label: "Login Email", value: form.email || "—" },
+            ].map(({ label, value }) => (
+              <div key={label} className="px-5 py-3.5">
+                <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">{label}</p>
+                <p className="text-sm font-extrabold text-gray-900">{value}</p>
+              </div>
+            ))}
             <div className="px-5 py-3.5">
               <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 mb-0.5">Password</p>
               <div className="flex items-center gap-2">
                 <p className="text-sm font-extrabold text-gray-900 tracking-widest flex-1">
                   {showConfirmPassword ? form.password : "••••••••"}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword((v) => !v)}
-                  className="text-gray-400 hover:text-indigo-600 transition shrink-0"
-                >
+                <button type="button" onClick={() => setShowConfirmPassword((v) => !v)} className="text-gray-400 hover:text-indigo-600 transition shrink-0">
                   {showConfirmPassword ? <FiEyeOff size={15} /> : <FiEye size={15} />}
                 </button>
               </div>
@@ -606,18 +642,10 @@ function ConfirmAddModal({ form, onConfirm, onCancel, loading }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={onCancel}
-              disabled={loading}
-              className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-700 font-extrabold text-sm hover:bg-slate-200 transition disabled:opacity-50"
-            >
+            <button onClick={onCancel} disabled={loading} className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-700 font-extrabold text-sm hover:bg-slate-200 transition disabled:opacity-50">
               Cancel
             </button>
-            <button
-              onClick={onConfirm}
-              disabled={loading}
-              className="flex-1 py-3 rounded-xl bg-linear-to-r from-indigo-600 to-purple-600 text-white font-extrabold text-sm hover:from-indigo-700 hover:to-purple-700 transition shadow-md disabled:opacity-60 flex items-center justify-center gap-2"
-            >
+            <button onClick={onConfirm} disabled={loading} className="flex-1 py-3 rounded-xl bg-linear-to-r from-indigo-600 to-purple-600 text-white font-extrabold text-sm hover:from-indigo-700 hover:to-purple-700 transition shadow-md disabled:opacity-60 flex items-center justify-center gap-2">
               {loading ? (
                 <>
                   <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
@@ -640,29 +668,21 @@ function ConfirmAddModal({ form, onConfirm, onCancel, loading }) {
 // ── Pagination ────────────────────────────────────────────────────────────────
 const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSize }) => {
   if (totalPages <= 1) return null;
-
   const from = (currentPage - 1) * pageSize + 1;
   const to = Math.min(currentPage * pageSize, totalItems);
-
   const pages = [];
   const delta = 1;
   const left = currentPage - delta;
   const right = currentPage + delta;
-
   for (let i = 1; i <= totalPages; i++) {
     if (i === 1 || i === totalPages || (i >= left && i <= right)) pages.push(i);
     else if (i === left - 1 || i === right + 1) pages.push("...");
   }
-
-  const dedupedPages = pages.filter(
-    (p, idx) => !(p === "..." && pages[idx - 1] === "...")
-  );
-
+  const dedupedPages = pages.filter((p, idx) => !(p === "..." && pages[idx - 1] === "..."));
   const btnBase = `inline-flex items-center justify-center w-8 h-8 rounded-lg text-xs font-extrabold border transition`;
   const activeBtn = "bg-indigo-600 text-white border-indigo-600 shadow";
   const inactiveBtn = "bg-white text-gray-700 border-gray-200 hover:bg-gray-50";
   const disabledBtn = "bg-white text-gray-300 border-gray-100 cursor-not-allowed";
-
   return (
     <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 bg-white">
       <p className="text-xs font-semibold text-gray-500">
@@ -670,31 +690,17 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSiz
         <span className="font-extrabold text-gray-700">{totalItems}</span> employees
       </p>
       <div className="flex items-center gap-1">
-        <button
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          className={`${btnBase} ${currentPage === 1 ? disabledBtn : inactiveBtn}`}
-        >
+        <button onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1} className={`${btnBase} ${currentPage === 1 ? disabledBtn : inactiveBtn}`}>
           <FiChevronLeft size={14} />
         </button>
         {dedupedPages.map((p, idx) =>
           p === "..." ? (
             <span key={`ellipsis-${idx}`} className="w-8 text-center text-xs text-gray-400 font-bold">…</span>
           ) : (
-            <button
-              key={p}
-              onClick={() => onPageChange(p)}
-              className={`${btnBase} ${currentPage === p ? activeBtn : inactiveBtn}`}
-            >
-              {p}
-            </button>
+            <button key={p} onClick={() => onPageChange(p)} className={`${btnBase} ${currentPage === p ? activeBtn : inactiveBtn}`}>{p}</button>
           )
         )}
-        <button
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className={`${btnBase} ${currentPage === totalPages ? disabledBtn : inactiveBtn}`}
-        >
+        <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages} className={`${btnBase} ${currentPage === totalPages ? disabledBtn : inactiveBtn}`}>
           <FiChevronRight size={14} />
         </button>
       </div>
@@ -719,6 +725,14 @@ export default function EmployeeTable() {
   const [showFormModal, setShowFormModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
+  // ── Error modal state ─────────────────────────────────────────────────────
+  const [errorModal, setErrorModal] = useState({ open: false, title: "", message: "", type: "error" });
+  const showError = (title, message, type = "error") => setErrorModal({ open: true, title, message, type });
+  const closeError = () => setErrorModal((p) => ({ ...p, open: false }));
+
+  // ── Confirm delete/disable from table ─────────────────────────────────────
+  const [confirmTableDelete, setConfirmTableDelete] = useState({ open: false, id: null });
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [selectedEmployeeDetail, setSelectedEmployeeDetail] = useState(null);
@@ -738,9 +752,7 @@ export default function EmployeeTable() {
         const lastNameA = (a.lastName || "").toLowerCase();
         const lastNameB = (b.lastName || "").toLowerCase();
         if (lastNameA !== lastNameB) return lastNameA.localeCompare(lastNameB);
-        const firstNameA = (a.firstName || "").toLowerCase();
-        const firstNameB = (b.firstName || "").toLowerCase();
-        return firstNameA.localeCompare(firstNameB);
+        return (a.firstName || "").toLowerCase().localeCompare((b.firstName || "").toLowerCase());
       });
       setEmployees(list);
     });
@@ -751,7 +763,6 @@ export default function EmployeeTable() {
   useEffect(() => {
     const employeeRef = collection(db, "employee");
     const innerUnsubs = [];
-
     const unsubEmployees = onSnapshot(employeeRef, (employeeSnapshot) => {
       const map = {};
       employeeSnapshot.forEach((empDoc) => {
@@ -777,11 +788,7 @@ export default function EmployeeTable() {
       });
     });
     innerUnsubs.push(unsubEmployees);
-
-    return () => {
-      unsubEmployees();
-      innerUnsubs.forEach((u) => u());
-    };
+    return () => { unsubEmployees(); innerUnsubs.forEach((u) => u()); };
   }, []);
 
   useEffect(() => {
@@ -837,7 +844,6 @@ export default function EmployeeTable() {
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, currentPage]);
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   const getFullName = (e) => {
     const mi = e.middleInitial?.trim() ? `${e.middleInitial.trim().replace(/\.?$/, "")}.` : "";
     return [e.firstName, mi, e.lastName, e.suffix].filter(Boolean).join(" ");
@@ -859,18 +865,29 @@ export default function EmployeeTable() {
     return "Needs Improvement";
   };
 
+  // ── Duplicate checkers ────────────────────────────────────────────────────
+  const isEmailDuplicate = (email, excludeId = null) => {
+    return employees.some(
+      (e) => e.id !== excludeId && (e.email || "").toLowerCase().trim() === email.toLowerCase().trim()
+    );
+  };
+
+  const isPhoneDuplicate = (number, excludeId = null) => {
+    return employees.some(
+      (e) => e.id !== excludeId && (e.number || "").trim() === number.trim()
+    );
+  };
+
   // ── Input handlers ────────────────────────────────────────────────────────
   const handleFirstNameChange = (e) => {
     const raw = e.target.value.slice(0, 20);
-    const capitalized = capitalizeFirst(raw);
-    setForm((prev) => ({ ...prev, firstName: capitalized }));
+    setForm((prev) => ({ ...prev, firstName: capitalizeFirst(raw) }));
     setFormErrors((p) => ({ ...p, firstName: undefined }));
   };
 
   const handleLastNameChange = (e) => {
     const raw = e.target.value.slice(0, 20);
-    const capitalized = capitalizeFirst(raw);
-    setForm((prev) => ({ ...prev, lastName: capitalized }));
+    setForm((prev) => ({ ...prev, lastName: capitalizeFirst(raw) }));
     setFormErrors((p) => ({ ...p, lastName: undefined }));
   };
 
@@ -890,11 +907,6 @@ export default function EmployeeTable() {
     const val = e.target.value.slice(0, 80);
     setForm((prev) => ({ ...prev, email: val }));
     setFormErrors((p) => ({ ...p, email: undefined }));
-  };
-
-  const handleSuffixChange = (e) => {
-    const val = e.target.value.slice(0, 5);
-    setForm((prev) => ({ ...prev, suffix: val }));
   };
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
@@ -925,6 +937,9 @@ export default function EmployeeTable() {
         errors.password = "Must be 8+ chars with uppercase, lowercase, number & special char (!@#$%^&*).";
       }
     } else {
+      if (form.email && !isValidEmail(form.email)) {
+        errors.email = "Invalid email. Use a valid provider (e.g. gmail.com, yahoo.com).";
+      }
       if (form.password && !isValidPassword(form.password)) {
         errors.password = "Must be 8+ chars with uppercase, lowercase, number & special char (!@#$%^&*).";
       }
@@ -935,6 +950,27 @@ export default function EmployeeTable() {
 
   const handleAddClick = () => {
     if (!validateForm()) return;
+
+    // ── Check duplicate email ─────────────────────────────────────────────
+    if (isEmailDuplicate(form.email)) {
+      showError(
+        "Email Already Exists",
+        "An account with this email already exists. Please use a different email address.",
+        "error"
+      );
+      return;
+    }
+
+    // ── Check duplicate phone ─────────────────────────────────────────────
+    if (isPhoneDuplicate(form.number)) {
+      showError(
+        "Phone Number Already in Use",
+        "This phone number is already registered to another employee. Please use a different number.",
+        "warning"
+      );
+      return;
+    }
+
     setShowConfirm(true);
   };
 
@@ -959,7 +995,21 @@ export default function EmployeeTable() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) { alert(data.error || "Failed to create employee."); return; }
+      if (!res.ok) {
+        setShowConfirm(false);
+        // Map common backend errors to friendly modal messages
+        const msg = (data.error || "").toLowerCase();
+        if (msg.includes("email") && (msg.includes("already") || msg.includes("exists") || msg.includes("in use"))) {
+          showError(
+            "Email Already Exists",
+            "An account with this email already exists. Please use a different email address.",
+            "error"
+          );
+        } else {
+          showError("Failed to Create Employee", data.error || "An unexpected error occurred. Please try again.", "error");
+        }
+        return;
+      }
       if (data.employeeId || data.uid) {
         const empId = data.employeeId || data.uid;
         await updateDoc(doc(db, "employee", empId), {
@@ -974,7 +1024,6 @@ export default function EmployeeTable() {
         capitalize(form.lastName.trim()),
         form.suffix.trim(),
       ].filter(Boolean).join(" ");
-
       const positionSaved = form.position;
       setForm(emptyForm);
       setFormErrors({});
@@ -983,7 +1032,8 @@ export default function EmployeeTable() {
       setSuccessMessage(`${createdName} has been successfully added as ${positionSaved}.`);
     } catch (err) {
       console.error("Error creating employee:", err);
-      alert("Failed to connect to backend. Make sure the server is running.");
+      setShowConfirm(false);
+      showError("Connection Error", "Failed to connect to the backend server. Please make sure the server is running and try again.", "error");
     } finally {
       setCreating(false);
     }
@@ -1012,25 +1062,25 @@ export default function EmployeeTable() {
 
   const saveEdit = async () => {
     if (!editing) return;
-    const errors = {};
-    if (!form.shift || form.shift === "none") errors.shift = "Please select a shift.";
-    if (!form.number.trim()) {
-      errors.number = "Phone number is required.";
-    } else {
-      const phoneErr = getPhoneError(form.number);
-      if (form.number.length < 11) errors.number = "Phone number must be 11 digits.";
-      else if (phoneErr) errors.number = phoneErr;
+    if (!validateForm()) return;
+
+    // ── Check duplicate email (exclude self) ──────────────────────────────
+    if (form.email && isEmailDuplicate(form.email, editing)) {
+      showError(
+        "Email Already Exists",
+        "An account with this email already exists. Please use a different email address.",
+        "error"
+      );
+      return;
     }
-    if (!form.purok) errors.purok = "Purok is required.";
-    if (!form.address.trim()) errors.address = "Address is required.";
-    if (form.email && !isValidEmail(form.email)) {
-      errors.email = "Invalid email. Use a valid provider (e.g. gmail.com, yahoo.com).";
-    }
-    if (form.password && !isValidPassword(form.password)) {
-      errors.password = "Must be 8+ chars with uppercase, lowercase, number & special char (!@#$%^&*).";
-    }
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
+
+    // ── Check duplicate phone (exclude self) ──────────────────────────────
+    if (form.number && isPhoneDuplicate(form.number, editing)) {
+      showError(
+        "Phone Number Already in Use",
+        "This phone number is already registered to another employee. Please use a different number.",
+        "warning"
+      );
       return;
     }
 
@@ -1072,26 +1122,24 @@ export default function EmployeeTable() {
   };
 
   const deleteEmployee = async (id) => {
-    if (!confirm("Delete this employee?")) return;
-    await deleteDoc(doc(db, "employee", id));
-    setSuccessMessage("Employee has been successfully deleted.");
+    try {
+      await deleteDoc(doc(db, "employee", id));
+      setSuccessMessage("Employee has been successfully deleted.");
+    } catch (err) {
+      console.error("Error deleting employee:", err);
+      showError("Delete Failed", "Failed to delete the employee. Please try again.", "error");
+    }
   };
 
-  // ── Disable employee ──────────────────────────────────────────────────────
   const disableEmployee = async (id) => {
-    if (!confirm("Disable this employee's account? They will no longer be able to log in.")) return;
     try {
       await updateDoc(doc(db, "employee", id), { disabled: true });
-      setEmployees((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, disabled: true } : e))
-      );
-      setSelectedEmployeeDetail((prev) =>
-        prev?.id === id ? { ...prev, disabled: true } : prev
-      );
+      setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, disabled: true } : e)));
+      setSelectedEmployeeDetail((prev) => prev?.id === id ? { ...prev, disabled: true } : prev);
       setSuccessMessage("Employee account has been disabled.");
     } catch (err) {
       console.error("Error disabling employee:", err);
-      alert("Failed to disable employee account.");
+      showError("Disable Failed", "Failed to disable the employee account. Please try again.", "error");
     }
   };
 
@@ -1113,9 +1161,27 @@ export default function EmployeeTable() {
   return (
     <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
 
-      {successMessage && (
-        <SuccessToast message={successMessage} onClose={() => setSuccessMessage("")} />
-      )}
+      {successMessage && <SuccessToast message={successMessage} onClose={() => setSuccessMessage("")} />}
+
+      {/* Error Modal */}
+      <ErrorModal
+        open={errorModal.open}
+        onClose={closeError}
+        title={errorModal.title}
+        message={errorModal.message}
+        type={errorModal.type}
+      />
+
+      {/* Confirm delete from table row */}
+      <ConfirmModal
+        open={confirmTableDelete.open}
+        onClose={() => setConfirmTableDelete({ open: false, id: null })}
+        onConfirm={() => deleteEmployee(confirmTableDelete.id)}
+        title="Delete Employee"
+        message="This will permanently remove the employee record. This action cannot be undone."
+        confirmLabel="Yes, Delete"
+        confirmColor="rose"
+      />
 
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -1144,7 +1210,6 @@ export default function EmployeeTable() {
                 <p className="text-sm text-gray-600 font-semibold">Manage employees and view citizen feedback ratings.</p>
               </div>
             </div>
-
             <div className="flex items-center gap-3 w-full md:w-auto">
               <div className="relative flex-1 md:w-[340px]">
                 <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -1203,9 +1268,7 @@ export default function EmployeeTable() {
               <thead className="bg-white sticky top-0 z-10">
                 <tr className="border-b border-gray-200">
                   {["Name", "Position", "Shift", "Rating", "Feedback", "Actions"].map((h) => (
-                    <th key={h} className="px-6 py-4 text-left text-[11px] font-extrabold uppercase tracking-wider text-gray-600">
-                      {h}
-                    </th>
+                    <th key={h} className="px-6 py-4 text-left text-[11px] font-extrabold uppercase tracking-wider text-gray-600">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1216,7 +1279,6 @@ export default function EmployeeTable() {
                     className={`border-b border-gray-100 transition-colors cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-indigo-50/60`}
                     onClick={() => setSelectedEmployeeDetail(e)}
                   >
-                    {/* Name */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {e.avatar ? (
@@ -1232,34 +1294,24 @@ export default function EmployeeTable() {
                         </div>
                       </div>
                     </td>
-
-                    {/* Position */}
                     <td className="px-6 py-4">
                       <span className="text-sm font-extrabold text-gray-900">{e.position || "N/A"}</span>
                     </td>
-
-                    {/* Shift */}
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-full border ${shiftChip(e.shift)}`}>
                         {e.shift === "morning" ? <FiSun size={12} /> : e.shift === "evening" ? <FiMoon size={12} /> : null}
                         {shiftLabel(e.shift)}
                       </span>
                     </td>
-
-                    {/* Rating */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <span className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-extrabold rounded-full border ${getRatingBadge(e.rating)}`}>
                           <FiStar className="text-yellow-500" />
                           {e.rating !== null ? `${e.rating.toFixed(1)}` : "No rating"}
                         </span>
-                        {e.rating !== null && (
-                          <span className="text-xs font-semibold text-gray-500">{ratingLabel(e.rating)}</span>
-                        )}
+                        {e.rating !== null && <span className="text-xs font-semibold text-gray-500">{ratingLabel(e.rating)}</span>}
                       </div>
                     </td>
-
-                    {/* Feedback */}
                     <td className="px-6 py-4">
                       <button
                         onClick={(ev) => { ev.stopPropagation(); setSelectedEmployee(e); }}
@@ -1269,8 +1321,6 @@ export default function EmployeeTable() {
                         {e.feedbacks.length} {e.feedbacks.length === 1 ? "feedback" : "feedbacks"}
                       </button>
                     </td>
-
-                    {/* Actions */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <button
@@ -1280,7 +1330,7 @@ export default function EmployeeTable() {
                           <FiEdit2 /> Edit
                         </button>
                         <button
-                          onClick={(ev) => { ev.stopPropagation(); deleteEmployee(e.id); }}
+                          onClick={(ev) => { ev.stopPropagation(); setConfirmTableDelete({ open: true, id: e.id }); }}
                           className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 font-extrabold text-xs transition shadow-sm"
                         >
                           <FiTrash2 /> Delete
@@ -1289,7 +1339,6 @@ export default function EmployeeTable() {
                     </td>
                   </tr>
                 ))}
-
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={6} className="text-center py-16 text-gray-400 font-semibold">
@@ -1301,29 +1350,14 @@ export default function EmployeeTable() {
               </tbody>
             </table>
           </div>
-
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-            totalItems={filtered.length}
-            pageSize={PAGE_SIZE}
-          />
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} totalItems={filtered.length} pageSize={PAGE_SIZE} />
         </div>
       </div>
 
-      {/* =====================
-          ADD / EDIT MODAL
-      ===================== */}
+      {/* ADD / EDIT MODAL */}
       {showFormModal && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={closeFormModal}
-        >
-          <div
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl relative max-h-[92vh] overflow-y-auto border border-white/60"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={closeFormModal}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl relative max-h-[92vh] overflow-y-auto border border-white/60" onClick={(e) => e.stopPropagation()}>
             {/* Modal Header */}
             <div className="bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 px-7 py-6 rounded-t-3xl flex items-center justify-between sticky top-0 z-10">
               <div className="flex items-center gap-3">
@@ -1331,9 +1365,7 @@ export default function EmployeeTable() {
                   {editing ? <FiEdit2 size={18} className="text-white" /> : <FiPlus size={18} className="text-white" />}
                 </div>
                 <div>
-                  <h2 className="text-lg font-extrabold text-white">
-                    {editing ? "Edit Employee" : "Add New Employee"}
-                  </h2>
+                  <h2 className="text-lg font-extrabold text-white">{editing ? "Edit Employee" : "Add New Employee"}</h2>
                   <p className="text-indigo-200 text-xs font-semibold">
                     {editing ? "Update editable fields below. Name is locked after creation." : "Fill in all required fields to register a new employee."}
                   </p>
@@ -1344,9 +1376,7 @@ export default function EmployeeTable() {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-7 space-y-6">
-
               {/* Section 1: Personal Information */}
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-2">
@@ -1355,9 +1385,7 @@ export default function EmployeeTable() {
                 </p>
                 <div className="grid grid-cols-12 gap-3">
                   <div className="col-span-12 sm:col-span-4">
-                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                      First Name <span className="text-rose-500">*</span>
-                    </label>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">First Name <span className="text-rose-500">*</span></label>
                     <input
                       placeholder="e.g., Maria"
                       value={form.firstName}
@@ -1373,7 +1401,6 @@ export default function EmployeeTable() {
                       {!editing && <p className="text-xs text-gray-400 ml-auto">{form.firstName.length}/20</p>}
                     </div>
                   </div>
-
                   <div className="col-span-12 sm:col-span-2">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">M.I.</label>
                     <input
@@ -1386,11 +1413,8 @@ export default function EmployeeTable() {
                         ${editing ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-100" : "bg-white border-gray-200"}`}
                     />
                   </div>
-
                   <div className="col-span-12 sm:col-span-4">
-                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                      Last Name <span className="text-rose-500">*</span>
-                    </label>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Last Name <span className="text-rose-500">*</span></label>
                     <input
                       placeholder="e.g., Santos"
                       value={form.lastName}
@@ -1406,38 +1430,26 @@ export default function EmployeeTable() {
                       {!editing && <p className="text-xs text-gray-400 ml-auto">{form.lastName.length}/20</p>}
                     </div>
                   </div>
-
                   <div className="col-span-12 sm:col-span-2">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Suffix</label>
-                    <input
-                      placeholder="Jr."
+                    <select
                       value={form.suffix}
                       disabled={!!editing}
-                      onChange={handleSuffixChange}
-                      maxLength={5}
+                      onChange={(e) => setForm({ ...form, suffix: e.target.value })}
                       className={`w-full border rounded-xl px-3 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-center
                         ${editing ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-100" : "bg-white border-gray-200"}`}
-                    />
+                    >
+                      {suffixOptions.map((s) => <option key={s} value={s}>{s || "None"}</option>)}
+                    </select>
                   </div>
                 </div>
-
                 {!editing && (form.firstName || form.lastName) && (
                   <p className="mt-2 text-xs text-indigo-600 font-extrabold">
                     Preview:{" "}
-                    {[
-                      form.firstName,
-                      form.middleInitial?.trim() ? `${form.middleInitial.trim().replace(/\.?$/, "")}.` : "",
-                      form.lastName,
-                      form.suffix,
-                    ].filter(Boolean).join(" ") || "—"}
+                    {[form.firstName, form.middleInitial?.trim() ? `${form.middleInitial.trim().replace(/\.?$/, "")}.` : "", form.lastName, form.suffix].filter(Boolean).join(" ") || "—"}
                   </p>
                 )}
-
-                {editing && (
-                  <p className="mt-2 text-xs text-amber-600 font-semibold flex items-center gap-1">
-                    ⚠️ Name fields are locked after creation.
-                  </p>
-                )}
+                {editing && <p className="mt-2 text-xs text-amber-600 font-semibold flex items-center gap-1">⚠️ Name fields are locked after creation.</p>}
               </div>
 
               {/* Section 2: Position, Shift & Contact */}
@@ -1454,16 +1466,11 @@ export default function EmployeeTable() {
                       onChange={(e) => setForm({ ...form, position: e.target.value })}
                       className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-semibold"
                     >
-                      {positionOptions.filter((p) => p !== "All Positions").map((p) => (
-                        <option key={p} value={p}>{p}</option>
-                      ))}
+                      {positionOptions.filter((p) => p !== "All Positions").map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>
-
                   <div className="col-span-12 sm:col-span-4">
-                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                      Shift <span className="text-rose-500">*</span>
-                    </label>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Shift <span className="text-rose-500">*</span></label>
                     <div className="flex gap-2">
                       {[
                         { value: "morning", label: "Morning", icon: <FiSun size={14} className="text-amber-500" /> },
@@ -1472,92 +1479,59 @@ export default function EmployeeTable() {
                         <button
                           key={s.value}
                           type="button"
-                          onClick={() => {
-                            setForm({ ...form, shift: s.value });
-                            setFormErrors((p) => ({ ...p, shift: undefined }));
-                          }}
+                          onClick={() => { setForm({ ...form, shift: s.value }); setFormErrors((p) => ({ ...p, shift: undefined })); }}
                           className={`flex-1 flex flex-col items-center justify-center gap-1 py-2.5 px-2 rounded-xl border text-xs font-extrabold transition
                             ${form.shift === s.value
-                              ? s.value === "morning"
-                                ? "bg-amber-100 border-amber-400 text-amber-800 shadow-sm"
-                                : "bg-indigo-100 border-indigo-400 text-indigo-800 shadow-sm"
-                              : formErrors.shift
-                              ? "bg-white border-red-400 text-gray-500 hover:bg-gray-50"
-                              : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                              ? s.value === "morning" ? "bg-amber-100 border-amber-400 text-amber-800 shadow-sm" : "bg-indigo-100 border-indigo-400 text-indigo-800 shadow-sm"
+                              : formErrors.shift ? "bg-white border-red-400 text-gray-500 hover:bg-gray-50" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
                             }`}
                         >
-                          {s.icon}
-                          {s.label}
+                          {s.icon}{s.label}
                         </button>
                       ))}
                     </div>
-                    {formErrors.shift && (
-                      <p className="text-xs text-red-500 mt-1">{formErrors.shift}</p>
-                    )}
+                    {formErrors.shift && <p className="text-xs text-red-500 mt-1">{formErrors.shift}</p>}
                   </div>
-
                   <div className="col-span-12 sm:col-span-4">
-                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                      Phone Number <span className="text-rose-500">*</span>
-                    </label>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Phone Number <span className="text-rose-500">*</span></label>
                     <input
                       type="tel"
                       placeholder="e.g., 09123456789"
                       value={form.number}
                       onChange={handlePhoneChange}
                       maxLength={11}
-                      className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
-                        ${formErrors.number ? "border-red-400" : "border-gray-200"}`}
+                      className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${formErrors.number ? "border-red-400" : "border-gray-200"}`}
                     />
                     {formErrors.number ? (
                       <p className="text-xs text-red-500 mt-1">{formErrors.number}</p>
                     ) : (
                       <p className="text-xs text-gray-400 mt-1">
                         {form.number.length}/11 — must start with 09
-                        {form.number.length === 11 && isValidPhoneNumber(form.number) && (
-                          <span className="text-emerald-600 font-bold ml-1">✓ Valid</span>
-                        )}
-                        {form.number.length === 11 && !isValidPhoneNumber(form.number) && (
-                          <span className="text-red-500 font-bold ml-1">✗ Invalid pattern</span>
-                        )}
+                        {form.number.length === 11 && isValidPhoneNumber(form.number) && <span className="text-emerald-600 font-bold ml-1">✓ Valid</span>}
+                        {form.number.length === 11 && !isValidPhoneNumber(form.number) && <span className="text-red-500 font-bold ml-1">✗ Invalid</span>}
                       </p>
                     )}
                   </div>
-
                   <div className="col-span-12 sm:col-span-2">
-                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                      Purok <span className="text-rose-500">*</span>
-                    </label>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Purok <span className="text-rose-500">*</span></label>
                     <select
                       value={form.purok}
-                      onChange={(e) => {
-                        setForm({ ...form, purok: e.target.value });
-                        setFormErrors((p) => ({ ...p, purok: undefined }));
-                      }}
-                      className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
-                        ${formErrors.purok ? "border-red-400" : "border-gray-200"}`}
+                      onChange={(e) => { setForm({ ...form, purok: e.target.value }); setFormErrors((p) => ({ ...p, purok: undefined })); }}
+                      className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${formErrors.purok ? "border-red-400" : "border-gray-200"}`}
                     >
                       <option value="">Select</option>
-                      {["1", "2", "3", "4", "5", "6"].map((v) => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
+                      {["1", "2", "3", "4", "5", "6"].map((v) => <option key={v} value={v}>{v}</option>)}
                     </select>
-                    {formErrors.purok && (
-                      <p className="text-xs text-red-500 mt-1">{formErrors.purok}</p>
-                    )}
+                    {formErrors.purok && <p className="text-xs text-red-500 mt-1">{formErrors.purok}</p>}
                   </div>
-
                   <div className="col-span-12 sm:col-span-10">
-                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                      Address <span className="text-rose-500">*</span>
-                    </label>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Address <span className="text-rose-500">*</span></label>
                     <input
                       placeholder="e.g., 50 Church St., Grace Village, Purok 1"
                       value={form.address}
                       onChange={handleAddressChange}
                       maxLength={100}
-                      className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
-                        ${formErrors.address ? "border-red-400" : "border-gray-200"}`}
+                      className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${formErrors.address ? "border-red-400" : "border-gray-200"}`}
                     />
                     {formErrors.address ? (
                       <p className="text-xs text-red-500 mt-1">{formErrors.address}</p>
@@ -1590,43 +1564,27 @@ export default function EmployeeTable() {
                           maxLength={80}
                           className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${formErrors.email ? "border-red-400" : "border-gray-200"}`}
                         />
-                        {formErrors.email
-                          ? <p className="text-xs text-red-500 mt-1">{formErrors.email}</p>
-                          : <p className="text-xs text-gray-400 mt-1">{form.email.length}/80</p>
-                        }
+                        {formErrors.email ? <p className="text-xs text-red-500 mt-1">{formErrors.email}</p> : <p className="text-xs text-gray-400 mt-1">{form.email.length}/80</p>}
                       </div>
-
                       <div className="col-span-12 sm:col-span-6">
                         <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Current Password</label>
-                        <div className={`relative w-full border rounded-xl bg-gray-50 border-gray-100 flex items-center`}>
+                        <div className="relative w-full border rounded-xl bg-gray-50 border-gray-100 flex items-center">
                           <FiLock size={14} className="text-gray-400 shrink-0 ml-4" />
                           <span className={`flex-1 px-3 py-2.5 text-sm font-semibold text-gray-700 select-all tracking-wide ${!showCurrentPassword ? "tracking-[0.25em]" : ""}`}>
-                            {showCurrentPassword
-                              ? (currentPassword || <span className="text-gray-400 italic font-normal text-xs">Not stored in record</span>)
-                              : "••••••••"
-                            }
+                            {showCurrentPassword ? (currentPassword || <span className="text-gray-400 italic font-normal text-xs">Not stored in record</span>) : "••••••••"}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                            className="pr-4 text-gray-400 hover:text-indigo-600 transition"
-                          >
+                          <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="pr-4 text-gray-400 hover:text-indigo-600 transition">
                             {showCurrentPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
                           </button>
                         </div>
                         <p className="text-xs text-gray-400 mt-1">Admin view only — visible to you.</p>
                       </div>
                     </div>
-
                     <div>
                       {!showChangePassword ? (
                         <button
                           type="button"
-                          onClick={() => {
-                            setShowChangePassword(true);
-                            setForm((p) => ({ ...p, password: "" }));
-                            setFormErrors((p) => ({ ...p, password: undefined }));
-                          }}
+                          onClick={() => { setShowChangePassword(true); setForm((p) => ({ ...p, password: "" })); setFormErrors((p) => ({ ...p, password: undefined })); }}
                           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-indigo-300 text-indigo-600 hover:border-indigo-500 hover:bg-indigo-50 font-extrabold text-xs transition"
                         >
                           <FiKey size={14} /> Change Password
@@ -1634,16 +1592,10 @@ export default function EmployeeTable() {
                       ) : (
                         <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 space-y-3">
                           <div className="flex items-center justify-between">
-                            <p className="text-xs font-extrabold text-indigo-700 flex items-center gap-1.5">
-                              <FiKey size={13} /> Set New Password
-                            </p>
+                            <p className="text-xs font-extrabold text-indigo-700 flex items-center gap-1.5"><FiKey size={13} /> Set New Password</p>
                             <button
                               type="button"
-                              onClick={() => {
-                                setShowChangePassword(false);
-                                setForm((p) => ({ ...p, password: "" }));
-                                setFormErrors((p) => ({ ...p, password: undefined }));
-                              }}
+                              onClick={() => { setShowChangePassword(false); setForm((p) => ({ ...p, password: "" })); setFormErrors((p) => ({ ...p, password: undefined })); }}
                               className="text-xs text-gray-400 hover:text-gray-600 font-semibold flex items-center gap-1 transition"
                             >
                               <FiXCircle size={13} /> Cancel
@@ -1656,17 +1608,10 @@ export default function EmployeeTable() {
                               autoComplete="new-password"
                               placeholder="Min. 8 chars, A-Z, a-z, 0-9, !@#$"
                               value={form.password}
-                              onChange={(e) => {
-                                setForm({ ...form, password: e.target.value });
-                                setFormErrors((p) => ({ ...p, password: undefined }));
-                              }}
+                              onChange={(e) => { setForm({ ...form, password: e.target.value }); setFormErrors((p) => ({ ...p, password: undefined })); }}
                               className={`w-full border rounded-xl px-4 py-2.5 pr-10 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${formErrors.password ? "border-red-400" : "border-indigo-200"}`}
                             />
-                            <button
-                              type="button"
-                              onClick={() => setShowEditPassword(!showEditPassword)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
-                            >
+                            <button type="button" onClick={() => setShowEditPassword(!showEditPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700">
                               {showEditPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
                             </button>
                           </div>
@@ -1675,19 +1620,13 @@ export default function EmployeeTable() {
                               <div className="h-1.5 w-full bg-indigo-100 rounded-full overflow-hidden">
                                 <div className={`h-full rounded-full transition-all duration-300 ${passwordStrength.color} ${passwordStrength.width}`} />
                               </div>
-                              <p className={`text-[10px] font-extrabold ${
-                                passwordStrength.label === "Weak" ? "text-rose-500" :
-                                passwordStrength.label === "Fair" ? "text-amber-500" :
-                                passwordStrength.label === "Good" ? "text-blue-500" : "text-emerald-500"
-                              }`}>
+                              <p className={`text-[10px] font-extrabold ${passwordStrength.label === "Weak" ? "text-rose-500" : passwordStrength.label === "Fair" ? "text-amber-500" : passwordStrength.label === "Good" ? "text-blue-500" : "text-emerald-500"}`}>
                                 Strength: {passwordStrength.label}
                               </p>
                             </div>
                           )}
                           {formErrors.password && <p className="text-xs text-red-500">{formErrors.password}</p>}
-                          {!formErrors.password && !form.password && (
-                            <p className="text-xs text-indigo-500/70">8+ chars • A-Z • a-z • 0-9 • !@#$%^&amp;*</p>
-                          )}
+                          {!formErrors.password && !form.password && <p className="text-xs text-indigo-500/70">8+ chars • A-Z • a-z • 0-9 • !@#$%^&amp;*</p>}
                         </div>
                       )}
                     </div>
@@ -1695,9 +1634,7 @@ export default function EmployeeTable() {
                 ) : (
                   <div className="grid grid-cols-12 gap-3">
                     <div className="col-span-12 sm:col-span-6">
-                      <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                        Email <span className="text-rose-500">*</span>
-                      </label>
+                      <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Email <span className="text-rose-500">*</span></label>
                       <input
                         type="email"
                         name="new-email-field"
@@ -1709,18 +1646,12 @@ export default function EmployeeTable() {
                         className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${formErrors.email ? "border-red-400" : "border-gray-200"}`}
                       />
                       <div className="flex items-center justify-between mt-1">
-                        {formErrors.email
-                          ? <p className="text-xs text-red-500">{formErrors.email}</p>
-                          : <p className="text-xs text-gray-400">Must use a valid email provider</p>
-                        }
+                        {formErrors.email ? <p className="text-xs text-red-500">{formErrors.email}</p> : <p className="text-xs text-gray-400">Must use a valid email provider</p>}
                         <p className="text-xs text-gray-400 ml-auto">{form.email.length}/80</p>
                       </div>
                     </div>
-
                     <div className="col-span-12 sm:col-span-6">
-                      <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
-                        Password <span className="text-rose-500">*</span>
-                      </label>
+                      <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">Password <span className="text-rose-500">*</span></label>
                       <div className="relative">
                         <input
                           type={showPassword ? "text" : "password"}
@@ -1731,11 +1662,7 @@ export default function EmployeeTable() {
                           onChange={(e) => { setForm({ ...form, password: e.target.value }); setFormErrors((p) => ({ ...p, password: undefined })); }}
                           className={`w-full border rounded-xl px-4 py-2.5 pr-10 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${formErrors.password ? "border-red-400" : "border-gray-200"}`}
                         />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
-                        >
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700">
                           {showPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
                         </button>
                       </div>
@@ -1744,19 +1671,13 @@ export default function EmployeeTable() {
                           <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
                             <div className={`h-full rounded-full transition-all duration-300 ${passwordStrength.color} ${passwordStrength.width}`} />
                           </div>
-                          <p className={`text-[10px] font-extrabold ${
-                            passwordStrength.label === "Weak" ? "text-rose-500" :
-                            passwordStrength.label === "Fair" ? "text-amber-500" :
-                            passwordStrength.label === "Good" ? "text-blue-500" : "text-emerald-500"
-                          }`}>
+                          <p className={`text-[10px] font-extrabold ${passwordStrength.label === "Weak" ? "text-rose-500" : passwordStrength.label === "Fair" ? "text-amber-500" : passwordStrength.label === "Good" ? "text-blue-500" : "text-emerald-500"}`}>
                             Strength: {passwordStrength.label}
                           </p>
                         </div>
                       )}
                       {formErrors.password && <p className="text-xs text-red-500 mt-1">{formErrors.password}</p>}
-                      {!formErrors.password && !form.password && (
-                        <p className="text-xs text-gray-400 mt-1">8+ chars • A-Z • a-z • 0-9 • !@#$%^&amp;*</p>
-                      )}
+                      {!formErrors.password && !form.password && <p className="text-xs text-gray-400 mt-1">8+ chars • A-Z • a-z • 0-9 • !@#$%^&amp;*</p>}
                     </div>
                   </div>
                 )}
@@ -1766,16 +1687,10 @@ export default function EmployeeTable() {
               <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
                 {editing ? (
                   <>
-                    <button
-                      onClick={saveEdit}
-                      className="flex-1 inline-flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-3 rounded-xl font-extrabold hover:bg-indigo-700 transition shadow-md text-sm"
-                    >
+                    <button onClick={saveEdit} className="flex-1 inline-flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-3 rounded-xl font-extrabold hover:bg-indigo-700 transition shadow-md text-sm">
                       <FiEdit2 size={15} /> Save Changes
                     </button>
-                    <button
-                      onClick={closeFormModal}
-                      className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-100 text-slate-700 px-5 py-3 rounded-xl font-extrabold hover:bg-slate-200 transition text-sm"
-                    >
+                    <button onClick={closeFormModal} className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-100 text-slate-700 px-5 py-3 rounded-xl font-extrabold hover:bg-slate-200 transition text-sm">
                       <FiXCircle size={15} /> Cancel
                     </button>
                   </>
@@ -1784,16 +1699,11 @@ export default function EmployeeTable() {
                     <button
                       onClick={handleAddClick}
                       disabled={creating}
-                      className={`flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-extrabold transition shadow-md text-sm ${
-                        creating ? "bg-gray-400 text-white cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
-                      }`}
+                      className={`flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-extrabold transition shadow-md text-sm ${creating ? "bg-gray-400 text-white cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}
                     >
                       <FiPlus size={15} /> Add Employee
                     </button>
-                    <button
-                      onClick={closeFormModal}
-                      className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-100 text-slate-700 px-5 py-3 rounded-xl font-extrabold hover:bg-slate-200 transition text-sm"
-                    >
+                    <button onClick={closeFormModal} className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-100 text-slate-700 px-5 py-3 rounded-xl font-extrabold hover:bg-slate-200 transition text-sm">
                       <FiXCircle size={15} /> Cancel
                     </button>
                   </>
@@ -1806,12 +1716,7 @@ export default function EmployeeTable() {
 
       {/* Confirm Add Modal */}
       {showConfirm && (
-        <ConfirmAddModal
-          form={form}
-          loading={creating}
-          onConfirm={createEmployee}
-          onCancel={() => setShowConfirm(false)}
-        />
+        <ConfirmAddModal form={form} loading={creating} onConfirm={createEmployee} onCancel={() => setShowConfirm(false)} />
       )}
 
       {/* Employee Detail Modal */}
@@ -1826,9 +1731,7 @@ export default function EmployeeTable() {
       )}
 
       {/* Feedback Modal */}
-      {selectedEmployee && (
-        <FeedbackModal employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} />
-      )}
+      {selectedEmployee && <FeedbackModal employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} />}
     </div>
   );
 }
@@ -1864,9 +1767,7 @@ function ChipButton({ active, onClick, label }) {
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 rounded-xl text-xs font-extrabold transition border ${
-        active ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-      }`}
+      className={`px-4 py-2 rounded-xl text-xs font-extrabold transition border ${active ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}
     >
       {label}
     </button>
@@ -1885,9 +1786,9 @@ function FeedbackModal({ employee, onClose }) {
   const getPerformanceBadge = (rating) => {
     const num = Number(rating) || 0;
     if (num >= 4.5) return { text: "Excellent", cls: "bg-emerald-600" };
-    if (num >= 4)   return { text: "Very Good", cls: "bg-green-600" };
-    if (num >= 3)   return { text: "Good", cls: "bg-amber-600" };
-    if (num >= 2)   return { text: "Fair", cls: "bg-orange-600" };
+    if (num >= 4) return { text: "Very Good", cls: "bg-green-600" };
+    if (num >= 3) return { text: "Good", cls: "bg-amber-600" };
+    if (num >= 2) return { text: "Fair", cls: "bg-orange-600" };
     return { text: "Needs Improvement", cls: "bg-rose-600" };
   };
 
@@ -1913,11 +1814,7 @@ function FeedbackModal({ employee, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl relative max-h-[90vh] overflow-hidden border border-white/60"
-        onClick={(ev) => ev.stopPropagation()}
-      >
-        {/* Header */}
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl relative max-h-[90vh] overflow-hidden border border-white/60" onClick={(ev) => ev.stopPropagation()}>
         <div className="relative overflow-hidden bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 p-6 md:p-7">
           <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
           <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
@@ -1959,8 +1856,6 @@ function FeedbackModal({ employee, onClose }) {
             </div>
           </div>
         </div>
-
-        {/* Body */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-220px)] bg-linear-to-b from-white to-slate-50">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
@@ -2002,9 +1897,7 @@ function FeedbackModal({ employee, onClose }) {
               </div>
             )}
           </div>
-          {sorted.length > 0 && (
-            <div className="mt-6 text-xs text-gray-500 font-semibold">Tip: Click outside the modal to close.</div>
-          )}
+          {sorted.length > 0 && <div className="mt-6 text-xs text-gray-500 font-semibold">Tip: Click outside the modal to close.</div>}
         </div>
       </div>
     </div>

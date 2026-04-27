@@ -3,20 +3,49 @@
 // On deploy:  sets deploymentStatus & deployedTo (with coDeployedTanods) on each tanod,
 //             sets deployedTanods array + deployedTanodUid/Name on complaint
 // On resolve: clears all tanods' deployment, updates complaint status to "resolved"
-import React, { useState, useEffect, useMemo, useRef } from "react";
+// NEW: Auto-deploy night-shift tanods for urgent complaints at night
+//      Shift tabs in Deploy Modal (Morning / Evening) with proper lock-out
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import sirenAudio from "../../assets/The Purge Siren - Sound Effect for editing.mp3";
 import barangayLogo from "../../assets/sanroquelogo.png";
 import {
   FiAlertTriangle, FiClock, FiSearch, FiX,
   FiUser, FiMapPin, FiFileText, FiCalendar,
   FiCheckCircle, FiHome, FiShield, FiStar,
-  FiChevronLeft, FiChevronRight,
+  FiChevronLeft, FiChevronRight, FiMoon, FiSun,
+  FiZap,
 } from "react-icons/fi";
 import {
   collection, onSnapshot, doc, updateDoc,
   getDoc, setDoc, serverTimestamp,
 } from "firebase/firestore";
 import { firestore } from "../../firebaseConfig";
+
+// ── Shift helpers ─────────────────────────────────────────────────────────────
+// Day shift   :  8:00 AM – 4:59 PM  (hours 8 – 16)
+// Night shift :  7:00 PM – 4:59 AM  (hours 19 – 23 and 0 – 4)
+// Gap         :  5:00 PM – 6:59 PM  (hours 17 – 18)  → treated as "day" for UI
+//
+// getCurrentShift returns "day" or "night" based on wall-clock hour.
+const getCurrentShift = () => {
+  const h = new Date().getHours();
+  // Night: 19:00 – 04:59
+  if (h >= 19 || h < 5) return "night";
+  // Day: 8:00 – 16:59  (and gap 5:00–6:59, 17:00–18:59 → fall back to "day")
+  return "day";
+};
+
+// True only during actual night-shift hours (7 PM – 4:59 AM)
+const isNightTime = () => getCurrentShift() === "night";
+
+// Determine which shift a tanod belongs to via their "shift" field.
+// Accepts values like "day", "night", "morning", "evening", etc.
+const getTanodShift = (tanod) => {
+  const s = (tanod.shift || "").toLowerCase();
+  if (s.includes("night") || s.includes("evening")) return "night";
+  if (s.includes("day")   || s.includes("morning")) return "day";
+  return null; // unassigned
+};
 
 // ── Persisted seen-feedback keys ──────────────────────────────────────────────
 const SEEN_KEY = "seenFeedbackKeys";
@@ -44,14 +73,11 @@ const StarDisplay = ({ value = 0, size = 22 }) => (
   </div>
 );
 
-const ratingLabel = (r) =>
-  ["", "Poor", "Fair", "Good", "Very Good", "Excellent"][r] || "";
-
 // ── Pagination Component ──────────────────────────────────────────────────────
 const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, itemsPerPage }) => {
   if (totalPages <= 1) return null;
   const start = (currentPage - 1) * itemsPerPage + 1;
-  const end = Math.min(currentPage * itemsPerPage, totalItems);
+  const end   = Math.min(currentPage * itemsPerPage, totalItems);
 
   const getPageNumbers = () => {
     const pages = [];
@@ -60,9 +86,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, itemsPe
     } else {
       pages.push(1);
       if (currentPage > 3) pages.push("...");
-      for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
-        pages.push(i);
-      }
+      for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i);
       if (currentPage < totalPages - 2) pages.push("...");
       pages.push(totalPages);
     }
@@ -76,35 +100,26 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, itemsPe
         <span className="font-extrabold text-gray-800">{totalItems}</span> complaints
       </p>
       <div className="flex items-center gap-1">
-        <button
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
-        >
+        <button onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1}
+          className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition">
           <FiChevronLeft size={15} />
         </button>
         {getPageNumbers().map((page, idx) =>
           page === "..." ? (
             <span key={`ellipsis-${idx}`} className="px-2 py-1 text-xs font-semibold text-gray-400">…</span>
           ) : (
-            <button
-              key={page}
-              onClick={() => onPageChange(page)}
+            <button key={page} onClick={() => onPageChange(page)}
               className={`w-8 h-8 rounded-lg text-xs font-extrabold transition border ${
                 currentPage === page
                   ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
                   : "bg-white text-gray-700 border-gray-200 hover:bg-indigo-50"
-              }`}
-            >
+              }`}>
               {page}
             </button>
           )
         )}
-        <button
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
-        >
+        <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages}
+          className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition">
           <FiChevronRight size={15} />
         </button>
       </div>
@@ -116,14 +131,8 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, itemsPe
 const ConfirmResolveModal = ({ complaint, onConfirm, onCancel, resolving }) => {
   if (!complaint) return null;
   return (
-    <div
-      className="fixed inset-0 z-60 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-60 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center" onClick={onCancel}>
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="bg-linear-to-r from-green-600 to-emerald-600 px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3 text-white">
             <div className="bg-white/20 p-2.5 rounded-xl"><FiCheckCircle size={20} /></div>
@@ -132,10 +141,7 @@ const ConfirmResolveModal = ({ complaint, onConfirm, onCancel, resolving }) => {
               <p className="text-green-100 text-xs font-semibold mt-0.5">Confirm resolution of this complaint</p>
             </div>
           </div>
-          <button
-            className="text-white/80 hover:text-white hover:bg-white/15 rounded-full p-2 transition"
-            onClick={onCancel}
-          >
+          <button className="text-white/80 hover:text-white hover:bg-white/15 rounded-full p-2 transition" onClick={onCancel}>
             <FiX size={20} />
           </button>
         </div>
@@ -177,21 +183,46 @@ const ConfirmResolveModal = ({ complaint, onConfirm, onCancel, resolving }) => {
         </div>
 
         <div className="border-t px-6 py-4 bg-slate-50 flex gap-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition"
-          >
+          <button onClick={onCancel}
+            className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition">
             Cancel
           </button>
-          <button
-            onClick={onConfirm}
-            disabled={resolving}
+          <button onClick={onConfirm} disabled={resolving}
             className={`flex-1 py-3 rounded-xl text-white font-extrabold text-sm transition shadow-md ${
               resolving ? "bg-gray-300 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
-            }`}
-          >
+            }`}>
             {resolving ? "Resolving…" : "Confirm & Resolve ✓"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Auto-Deploy Toast Notification ────────────────────────────────────────────
+const AutoDeployToast = ({ message, onDismiss }) => {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 6000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+
+  return (
+    <div className="fixed top-6 right-6 z-[100] max-w-sm w-full animate-bounce-in">
+      <div className="bg-gradient-to-r from-indigo-900 to-purple-900 text-white rounded-2xl shadow-2xl border border-indigo-500/40 overflow-hidden">
+        <div className="flex items-start gap-3 p-4">
+          <div className="bg-yellow-400 text-indigo-900 rounded-xl p-2 shrink-0 mt-0.5">
+            <FiZap size={18} />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-extrabold uppercase tracking-widest text-indigo-300 mb-0.5">Auto-Deploy</p>
+            <p className="text-sm font-bold leading-snug">{message}</p>
+          </div>
+          <button onClick={onDismiss} className="text-white/60 hover:text-white transition shrink-0">
+            <FiX size={16} />
+          </button>
+        </div>
+        <div className="h-1 bg-white/10">
+          <div className="h-full bg-yellow-400 animate-[shrink_6s_linear_forwards]" style={{ transformOrigin: "left" }} />
         </div>
       </div>
     </div>
@@ -209,7 +240,6 @@ const Notiftable = () => {
   const [notifications, setNotifications] = useState([]);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [previewImage, setPreviewImage]   = useState(null);
-  const [seenKeys]                        = useState(() => new Set());
   const [loading, setLoading]             = useState(true);
   const [startDate, setStartDate]         = useState("");
   const [endDate, setEndDate]             = useState("");
@@ -227,6 +257,7 @@ const Notiftable = () => {
   const [tanodSearch, setTanodSearch]     = useState("");
   const [tanodPage, setTanodPage]         = useState(1);
   const [deployError, setDeployError]     = useState("");
+  const [deployShiftTab, setDeployShiftTab] = useState("day"); // "day" | "night"
   const TANODS_PER_PAGE = 5;
   const MIN_TANODS = 2;
 
@@ -234,10 +265,14 @@ const Notiftable = () => {
   const [showConfirmResolve, setShowConfirmResolve] = useState(false);
   const [resolvingComplaint, setResolvingComplaint] = useState(null);
   const [resolving, setResolving]                   = useState(false);
-  
+
+  // ── Auto-deploy ───────────────────────────────────────────────────────────
+  const autoDeployedKeysRef    = useRef(new Set()); // complaint keys already auto-deployed
+  const [autoDeployToast, setAutoDeployToast] = useState(null); // { message }
+
   // ── Audio alert ────────────────────────────────────────────────────────────
   const audioRef = useRef(null);
-  const previousComplaintsCountRef = useRef(0);
+  const previousUrgentPendingCountRef = useRef(0);
 
   // ── Fetch tanods (employees) ──────────────────────────────────────────────
   useEffect(() => {
@@ -310,15 +345,96 @@ const Notiftable = () => {
     return () => { unsubUsers(); innerUnsubs.forEach((u) => u()); };
   }, []);
 
-  // ── Sound alert for new complaints ─────────────────────────────────────────
+  // ── Sound alert ───────────────────────────────────────────────────────────
   useEffect(() => {
-    const pendingCount = notifications.filter(c => (c.status || "pending") === "pending").length;
-    if (pendingCount > previousComplaintsCountRef.current && audioRef.current) {
+    const urgentPendingCount = notifications.filter(
+      (c) => c.label === "urgent" && (c.status || "pending") === "pending"
+    ).length;
+    if (urgentPendingCount > previousUrgentPendingCountRef.current && audioRef.current) {
       audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(err => console.log("Audio play failed:", err));
+      audioRef.current.play().catch(() => {});
     }
-    previousComplaintsCountRef.current = pendingCount;
+    previousUrgentPendingCountRef.current = urgentPendingCount;
   }, [notifications]);
+
+  // ── Auto-deploy night-shift tanods for urgent + pending complaints at night ──
+  // Runs whenever notifications or tanods change.
+  // Only triggers when current time is in the evening shift window.
+  useEffect(() => {
+    if (!isNightTime()) return;                        // only at night
+    if (tanods.length === 0) return;
+
+    const urgentPending = notifications.filter(
+      (c) => c.label === "urgent" && c.status === "pending"
+    );
+    if (urgentPending.length === 0) return;
+
+    // Find all evening/night-shift tanods that are verified + available
+    const nightShiftTanods = tanods.filter((t) => {
+      const shift = getTanodShift(t);
+      const isVerified  = (t.idstatus || "").toLowerCase() === "verified";
+      const isAvailable = (t.deploymentStatus || "available") !== "deployed";
+      return isVerified && isAvailable && shift === "night";
+    });
+
+    if (nightShiftTanods.length < MIN_TANODS) return; // not enough on duty
+
+    urgentPending.forEach(async (complaint) => {
+      const key = complaint.complaintKey;
+      if (autoDeployedKeysRef.current.has(key)) return; // already handled
+      autoDeployedKeysRef.current.add(key);
+
+      try {
+        const deployedTanods = nightShiftTanods.map((t) => ({ uid: t.uid, name: t.fullName }));
+        const deployedTanodNames = deployedTanods.map((t) => t.name).join(", ");
+        const deployedAt = new Date().toISOString();
+
+        // Update complaint
+        await updateDoc(
+          doc(firestore, "users", complaint.userId, "userComplaints", complaint.complaintKey),
+          {
+            deployedTanods,
+            deployedTanodUid:  deployedTanods[0].uid,
+            deployedTanodName: deployedTanodNames,
+            status:            "in-progress",
+          }
+        );
+
+        // Update each tanod
+        for (const { uid, name } of deployedTanods) {
+          const coDeployedTanods = deployedTanods.filter((t) => t.uid !== uid);
+          await updateDoc(doc(firestore, "employee", uid), {
+            deploymentStatus: "deployed",
+            deployedTo: {
+              complaintKey:    complaint.complaintKey,
+              userId:          complaint.userId,
+              complainantName: complaint.name,
+              type:            complaint.type,
+              incidentPurok:   complaint.incidentPurok,
+              description:     complaint.message,
+              deployedAt,
+              coDeployedTanods,
+            },
+          });
+        }
+
+        // Update local state
+        const patch = (c) =>
+          c.complaintKey === key
+            ? { ...c, deployedTanods, deployedTanodUid: deployedTanods[0].uid, deployedTanodName: deployedTanodNames, status: "in-progress" }
+            : c;
+        setNotifications((prev) => prev.map(patch));
+        setSelectedComplaint((prev) => prev ? patch(prev) : prev);
+
+        setAutoDeployToast({
+          message: `${nightShiftTanods.length} night-shift Banta Bayan auto-deployed for urgent complaint by ${complaint.name} (Purok ${complaint.incidentPurok}).`,
+        });
+      } catch (err) {
+        console.error("Auto-deploy failed:", err);
+        autoDeployedKeysRef.current.delete(key); // allow retry
+      }
+    });
+  }, [notifications, tanods]);
 
   // ── Date validation ───────────────────────────────────────────────────────
   const getDateBounds = () => {
@@ -341,9 +457,9 @@ const Notiftable = () => {
   const issueTypes = useMemo(() => {
     const set = new Set();
     notifications.forEach((n) => { const t = (n.type || "").trim(); if (t && t !== "—") set.add(t); });
-    const arr = Array.from(set);
+    const arr  = Array.from(set);
     const pref = ["medical", "fire", "noise", "waste", "infrastructure"];
-    const lm = new Map(arr.map((x) => [x.toLowerCase(), x]));
+    const lm   = new Map(arr.map((x) => [x.toLowerCase(), x]));
     return [...pref.map((p) => lm.get(p)).filter(Boolean), ...arr.filter((x) => !pref.includes(x.toLowerCase())).sort()];
   }, [notifications]);
 
@@ -385,11 +501,11 @@ const Notiftable = () => {
       : { icon: <FiClock         className="text-blue-600" />, text: "Non-Urgent", pill: "bg-blue-100 text-blue-800 ring-1 ring-blue-200" };
 
   const getIssueColor = (type) => ({
-    medical:       "bg-red-100 text-red-800 ring-1 ring-red-200",
-    fire:          "bg-orange-100 text-orange-800 ring-1 ring-orange-200",
-    noise:         "bg-purple-100 text-purple-800 ring-1 ring-purple-200",
-    waste:         "bg-green-100 text-green-800 ring-1 ring-green-200",
-    infrastructure:"bg-gray-100 text-gray-800 ring-1 ring-gray-200",
+    medical:        "bg-red-100 text-red-800 ring-1 ring-red-200",
+    fire:           "bg-orange-100 text-orange-800 ring-1 ring-orange-200",
+    noise:          "bg-purple-100 text-purple-800 ring-1 ring-purple-200",
+    waste:          "bg-green-100 text-green-800 ring-1 ring-green-200",
+    infrastructure: "bg-gray-100 text-gray-800 ring-1 ring-gray-200",
   })[(type || "").toLowerCase()] || "bg-gray-100 text-gray-800 ring-1 ring-gray-200";
 
   const getStatusDisplay = (status) => ({
@@ -399,33 +515,41 @@ const Notiftable = () => {
     resolved:      { pill: "bg-green-100 text-green-900 ring-1 ring-green-200",    text: "Resolved"    },
   })[(status || "").toLowerCase()] || { pill: "bg-yellow-100 text-yellow-900 ring-1 ring-yellow-200", text: "Pending" };
 
-  // ── Deploy tanod ───────────────────────────────────────────────────────────
+  // ── Deploy tanod ──────────────────────────────────────────────────────────
   const openDeployModal = (complaint) => {
+    const shift = getCurrentShift();
     setDeployTarget(complaint);
     setSelectedTanods(new Set());
     setTanodSearch("");
     setTanodPage(1);
+    setDeployShiftTab(getCurrentShift()); // default tab = current shift
+    setDeployError("");
     setShowDeployModal(true);
   };
 
   const toggleTanod = (uid) => {
     setSelectedTanods((prev) => {
       const next = new Set(prev);
-      if (next.has(uid)) next.delete(uid);
-      else next.add(uid);
+      if (next.has(uid)) next.delete(uid); else next.add(uid);
       return next;
     });
   };
 
+  // Tanods filtered by shift tab + search + verified
   const filteredTanods = useMemo(() => {
     const term = tanodSearch.toLowerCase();
     return tanods.filter((t) => {
-      const isApproved = (t.idstatus || "").toLowerCase() === "verified";
-      if (!isApproved) return false;
+      const isVerified = (t.idstatus || "").toLowerCase() === "verified";
+      if (!isVerified) return false;
+      // Shift tab filter
+      const tanodShift = getTanodShift(t);
+      if (deployShiftTab === "day"   && tanodShift === "night") return false;
+      if (deployShiftTab === "night" && tanodShift === "day")   return false;
+      // Search
       if (term && !t.fullName.toLowerCase().includes(term)) return false;
       return true;
     });
-  }, [tanods, tanodSearch]);
+  }, [tanods, tanodSearch, deployShiftTab]);
 
   const tanodTotalPages = Math.max(1, Math.ceil(filteredTanods.length / TANODS_PER_PAGE));
   const paginatedTanods = filteredTanods.slice(
@@ -433,23 +557,28 @@ const Notiftable = () => {
     tanodPage * TANODS_PER_PAGE
   );
 
+  // Clear selected tanods when shift tab changes (avoid cross-shift selection)
+  const handleShiftTabChange = (tab) => {
+    setDeployShiftTab(tab);
+    setSelectedTanods(new Set());
+    setTanodPage(1);
+  };
+
   const confirmDeploy = async () => {
     if (selectedTanods.size < MIN_TANODS || !deployTarget) return;
-    const unapprovedTanods = [];
+    const unapproved = [];
     for (const uid of selectedTanods) {
-      const tanod = tanods.find((t) => t.uid === uid);
-      if (!tanod || (tanod.idstatus || "").toLowerCase() !== "verified") {
-        unapprovedTanods.push(tanod?.fullName || uid);
-      }
+      const t = tanods.find((x) => x.uid === uid);
+      if (!t || (t.idstatus || "").toLowerCase() !== "verified") unapproved.push(t?.fullName || uid);
     }
-    if (unapprovedTanods.length > 0) {
-      setDeployError(`Cannot deploy tanods with pending ID verification: ${unapprovedTanods.join(", ")}. They must be verified first.`);
+    if (unapproved.length > 0) {
+      setDeployError(`Cannot deploy tanods with pending ID verification: ${unapproved.join(", ")}.`);
       return;
     }
     setDeploying(true);
     setDeployError("");
     try {
-      const selectedArr = [...selectedTanods];
+      const selectedArr    = [...selectedTanods];
       const deployedTanods = selectedArr.map((uid) => {
         const t = tanods.find((x) => x.uid === uid);
         return { uid, name: t?.fullName || "" };
@@ -507,14 +636,14 @@ const Notiftable = () => {
         doc(firestore, "users", resolvingComplaint.userId, "userComplaints", resolvingComplaint.complaintKey),
         { status: "resolved", resolvedAt: serverTimestamp() }
       );
-      const tanodsToResolve = resolvingComplaint.deployedTanods || [];
+      const tanodsToResolve = [...(resolvingComplaint.deployedTanods || [])];
       if (tanodsToResolve.length === 0 && resolvingComplaint.deployedTanodUid) {
         tanodsToResolve.push({ uid: resolvingComplaint.deployedTanodUid, name: resolvingComplaint.deployedTanodName });
       }
       for (const { uid } of tanodsToResolve) {
-        const tanodRef = doc(firestore, "employee", uid);
+        const tanodRef  = doc(firestore, "employee", uid);
         const tanodSnap = await getDoc(tanodRef);
-        const deployedTo = tanodSnap.exists() ? tanodSnap.data().deployedTo : null;
+        const deployedTo       = tanodSnap.exists() ? tanodSnap.data().deployedTo : null;
         const coDeployedTanods = tanodsToResolve.filter((t) => t.uid !== uid);
         await setDoc(
           doc(firestore, "employee", uid, "deploymentHistory", resolvingComplaint.complaintKey),
@@ -551,25 +680,39 @@ const Notiftable = () => {
 
   // ── Action button logic ───────────────────────────────────────────────────
   const handleActionClick = (complaint) => {
-    if (complaint.status === "pending") openDeployModal(complaint);
+    if (complaint.status === "pending")                              openDeployModal(complaint);
     else if (["in-progress", "in progress"].includes(complaint.status)) openConfirmResolve(complaint);
   };
 
   const actionLabel = (s) =>
-    s === "pending"                              ? "Deploy Tanod →"
-    : ["in-progress", "in progress"].includes(s) ? "Mark as Resolved"
+    s === "pending"                               ? "Deploy Tanod →"
+    : ["in-progress", "in progress"].includes(s)  ? "Mark as Resolved"
     : "Resolved ✓";
 
   const actionBg = (s) =>
-    s === "pending"                              ? "bg-blue-600 hover:bg-blue-700"
-    : ["in-progress", "in progress"].includes(s) ? "bg-green-600 hover:bg-green-700"
+    s === "pending"                               ? "bg-blue-600 hover:bg-blue-700"
+    : ["in-progress", "in progress"].includes(s)  ? "bg-green-600 hover:bg-green-700"
     : "bg-gray-400 cursor-not-allowed";
+
+  // ── Current shift badge ───────────────────────────────────────────────────
+  const currentShift   = getCurrentShift();
+  const nightNow       = currentShift === "night";
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="relative min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
       {/* Audio alert */}
-        <audio ref={audioRef} src={sirenAudio} />      <div
+      <audio ref={audioRef} src={sirenAudio} />
+
+      {/* Auto-deploy toast */}
+      {autoDeployToast && (
+        <AutoDeployToast
+          message={autoDeployToast.message}
+          onDismiss={() => setAutoDeployToast(null)}
+        />
+      )}
+
+      <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
           backgroundImage: `url(${barangayLogo})`,
@@ -582,6 +725,19 @@ const Notiftable = () => {
       />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-8 space-y-6">
+
+        {/* Current shift indicator */}
+        <div className="flex items-center gap-2">
+          <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-extrabold shadow-sm ring-1 ${
+            nightNow
+              ? "bg-indigo-900 text-indigo-100 ring-indigo-700"
+              : "bg-amber-50 text-amber-800 ring-amber-200"
+          }`}>
+            {nightNow
+              ? <><FiMoon size={14} /> Evening Shift Active — Auto-deploy enabled for urgent complaints</>
+              : <><FiSun  size={14} /> Morning Shift Active</>}
+          </div>
+        </div>
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -600,11 +756,9 @@ const Notiftable = () => {
                 <div className="relative">
                   <FiSearch className="absolute left-4 top-1/2 text-gray-400 -translate-y-1/2" size={18} />
                   <input
-                    type="text"
-                    placeholder="Search complaints..."
+                    type="text" placeholder="Search complaints..."
                     className="w-full pl-11 pr-4 py-3 text-sm font-semibold border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-4 focus:ring-indigo-200"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
               </div>
@@ -615,20 +769,15 @@ const Notiftable = () => {
                     <label className="text-xs font-bold text-gray-700 mb-1.5">
                       {lbl} <span className="text-gray-400 font-normal">(optional)</span>
                     </label>
-                    <input
-                      type="date"
-                      value={val}
-                      onChange={(e) => setter(e.target.value)}
+                    <input type="date" value={val} onChange={(e) => setter(e.target.value)}
                       className="px-4 py-3 text-sm font-semibold border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-4 focus:ring-indigo-200"
                     />
                   </div>
                 ))}
                 {(startDate || endDate) && (
                   <div className="flex flex-col justify-end">
-                    <button
-                      onClick={() => { setStartDate(""); setEndDate(""); }}
-                      className="px-4 py-3 text-sm font-bold text-gray-500 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition"
-                    >
+                    <button onClick={() => { setStartDate(""); setEndDate(""); }}
+                      className="px-4 py-3 text-sm font-bold text-gray-500 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition">
                       Clear dates
                     </button>
                   </div>
@@ -637,11 +786,8 @@ const Notiftable = () => {
 
               <div className="flex flex-col w-full sm:w-[220px]">
                 <label className="text-xs font-bold text-gray-700 mb-1.5">Issue Type</label>
-                <select
-                  value={issueFilter}
-                  onChange={(e) => setIssueFilter(e.target.value)}
-                  className="px-4 py-3 text-sm font-semibold border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-4 focus:ring-indigo-200"
-                >
+                <select value={issueFilter} onChange={(e) => setIssueFilter(e.target.value)}
+                  className="px-4 py-3 text-sm font-semibold border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-4 focus:ring-indigo-200">
                   <option value="all">All Types</option>
                   {issueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
@@ -649,15 +795,12 @@ const Notiftable = () => {
 
               <div className="flex gap-2 w-full xl:w-auto">
                 {["all", "urgent", "non-urgent"].map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
+                  <button key={f} onClick={() => setFilter(f)}
                     className={`px-4 py-3 rounded-xl text-sm font-bold transition-all border ${
                       filter === f
                         ? "bg-indigo-600 text-white border-indigo-600 shadow-lg"
                         : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
+                    }`}>
                     {f.charAt(0).toUpperCase() + f.slice(1).replace("-", " ")}
                   </button>
                 ))}
@@ -665,9 +808,7 @@ const Notiftable = () => {
             </div>
 
             {dateError && (
-              <div className="p-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-bold">
-                {dateError}
-              </div>
+              <div className="p-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-bold">{dateError}</div>
             )}
 
             <div className="flex flex-wrap gap-2 items-center">
@@ -675,18 +816,15 @@ const Notiftable = () => {
               {["all", "pending", "in-progress", "resolved"].map((s) => {
                 const active = statusFilter === s;
                 const style =
-                  s === "pending"      ? "bg-yellow-600 text-white"
+                  s === "pending"       ? "bg-yellow-600 text-white"
                   : s === "in-progress" ? "bg-blue-600 text-white"
                   : s === "resolved"    ? "bg-green-600 text-white"
                   : "bg-gray-900 text-white";
                 return (
-                  <button
-                    key={s}
-                    onClick={() => setStatusFilter(s)}
+                  <button key={s} onClick={() => setStatusFilter(s)}
                     className={`px-4 py-2.5 rounded-xl transition-all text-sm font-bold border ${
                       active ? `${style} border-transparent shadow-lg` : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
+                    }`}>
                     {s === "all" ? "All Status" : s.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}
                   </button>
                 );
@@ -718,11 +856,9 @@ const Notiftable = () => {
                       const urgency = getUrgencyDisplay(n.label);
                       const status  = getStatusDisplay(n.status);
                       return (
-                        <tr
-                          key={n.complaintKey}
+                        <tr key={n.complaintKey}
                           className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50/70"} border-b border-gray-100 hover:bg-indigo-50/60 transition cursor-pointer`}
-                          onClick={() => setSelectedComplaint(n)}
-                        >
+                          onClick={() => setSelectedComplaint(n)}>
                           <td className="px-5 py-4">
                             <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${urgency.pill}`}>
                               {urgency.icon}{urgency.text}
@@ -730,9 +866,7 @@ const Notiftable = () => {
                           </td>
                           <td className="px-5 py-4 text-sm font-bold text-gray-900">Purok {n.incidentPurok}</td>
                           <td className="px-5 py-4">
-                            <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                              {n.name}
-                            </div>
+                            <div className="flex items-center gap-2 text-sm font-bold text-gray-900">{n.name}</div>
                           </td>
                           <td className="px-5 py-4">
                             <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-bold ${getIssueColor(n.type)}`}>{n.type}</span>
@@ -769,13 +903,9 @@ const Notiftable = () => {
                   </tbody>
                 </table>
               </div>
-
-              {/* Pagination */}
               <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                totalItems={filteredNotifications.length}
+                currentPage={currentPage} totalPages={totalPages}
+                onPageChange={setCurrentPage} totalItems={filteredNotifications.length}
                 itemsPerPage={ITEMS_PER_PAGE}
               />
             </>
@@ -784,19 +914,13 @@ const Notiftable = () => {
 
         {/* ── Detail Modal ─────────────────────────────────────────────────── */}
         {selectedComplaint && (
-          <div
-            className="fixed inset-0 z-50 p-4 bg-black/40 backdrop-blur-sm flex items-center justify-center"
-            onClick={() => setSelectedComplaint(null)}
-          >
-            <div
-              className="bg-white rounded-2xl w-full max-w-3xl max-h-[96vh] shadow-2xl overflow-hidden flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
+          <div className="fixed inset-0 z-50 p-4 bg-black/40 backdrop-blur-sm flex items-center justify-center"
+            onClick={() => setSelectedComplaint(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[96vh] shadow-2xl overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}>
               <div className="relative bg-linear-to-r from-indigo-600 via-purple-600 to-pink-600 p-6 text-white">
-                <button
-                  className="absolute top-4 right-4 text-white/90 hover:bg-white/15 rounded-full p-2 transition"
-                  onClick={() => setSelectedComplaint(null)}
-                >
+                <button className="absolute top-4 right-4 text-white/90 hover:bg-white/15 rounded-full p-2 transition"
+                  onClick={() => setSelectedComplaint(null)}>
                   <FiX size={22} />
                 </button>
                 <h2 className="text-2xl font-extrabold">Complaint Details</h2>
@@ -816,28 +940,28 @@ const Notiftable = () => {
                       {getUrgencyDisplay(selectedComplaint.label).text}
                     </div>
                   </div>
-                  {selectedComplaint.deployedTanods && selectedComplaint.deployedTanods.length > 0 ? (
-                    selectedComplaint.deployedTanods.map((t) => (
-                      <div key={t.uid} className="rounded-xl px-4 py-3 bg-indigo-50 ring-1 ring-indigo-200">
-                        <div className="flex items-center gap-2 text-sm font-bold text-indigo-800">
-                          <FiShield size={18} />Deployed: {t.name}
+                  {selectedComplaint.deployedTanods && selectedComplaint.deployedTanods.length > 0
+                    ? selectedComplaint.deployedTanods.map((t) => (
+                        <div key={t.uid} className="rounded-xl px-4 py-3 bg-indigo-50 ring-1 ring-indigo-200">
+                          <div className="flex items-center gap-2 text-sm font-bold text-indigo-800">
+                            <FiShield size={18} />Deployed: {t.name}
+                          </div>
                         </div>
-                      </div>
-                    ))
-                  ) : selectedComplaint.deployedTanodName && (
-                    <div className="rounded-xl px-4 py-3 bg-indigo-50 ring-1 ring-indigo-200">
-                      <div className="flex items-center gap-2 text-sm font-bold text-indigo-800">
-                        <FiShield size={18} />Deployed: {selectedComplaint.deployedTanodName}
-                      </div>
-                    </div>
-                  )}
+                      ))
+                    : selectedComplaint.deployedTanodName && (
+                        <div className="rounded-xl px-4 py-3 bg-indigo-50 ring-1 ring-indigo-200">
+                          <div className="flex items-center gap-2 text-sm font-bold text-indigo-800">
+                            <FiShield size={18} />Deployed: {selectedComplaint.deployedTanodName}
+                          </div>
+                        </div>
+                      )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <InfoRow icon={<FiUser size={18} />}     title="Complainant"         value={selectedComplaint.name}                     tone="indigo" />
-                  <InfoRow icon={<FiHome size={18} />}     title="Complainant Address"  value={selectedComplaint.address}                  tone="blue"   />
-                  <InfoRow icon={<FiMapPin size={18} />}   title="Purok"               value={`Purok ${selectedComplaint.incidentPurok}`} tone="green"  />
-                  <InfoRow icon={<FiMapPin size={18} />}   title="Incident Location"   value={selectedComplaint.incidentLocation}          tone="amber"  />
+                  <InfoRow icon={<FiUser     size={18} />} title="Complainant"          value={selectedComplaint.name}                     tone="indigo" />
+                  <InfoRow icon={<FiHome     size={18} />} title="Complainant Address"   value={selectedComplaint.address}                  tone="blue"   />
+                  <InfoRow icon={<FiMapPin   size={18} />} title="Purok"                value={`Purok ${selectedComplaint.incidentPurok}`} tone="green"  />
+                  <InfoRow icon={<FiMapPin   size={18} />} title="Incident Location"    value={selectedComplaint.incidentLocation}          tone="amber"  />
                   <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
                     <div className="flex items-start gap-3">
                       <div className="p-2.5 rounded-xl bg-purple-100 text-purple-700"><FiFileText size={18} /></div>
@@ -853,12 +977,9 @@ const Notiftable = () => {
                   {selectedComplaint.evidencePhoto && (
                     <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
                       <p className="text-xs font-extrabold text-gray-600 uppercase tracking-wider mb-2">Proof</p>
-                      <img
-                        src={selectedComplaint.evidencePhoto}
-                        alt="Proof"
+                      <img src={selectedComplaint.evidencePhoto} alt="Proof"
                         onClick={() => setPreviewImage(selectedComplaint.evidencePhoto)}
-                        className="w-full h-auto object-cover rounded-xl shadow-lg border cursor-pointer hover:opacity-90 transition"
-                      />
+                        className="w-full h-auto object-cover rounded-xl shadow-lg border cursor-pointer hover:opacity-90 transition" />
                       <p className="mt-2 text-xs font-semibold text-gray-600">Click image to preview.</p>
                     </div>
                   )}
@@ -871,11 +992,9 @@ const Notiftable = () => {
               </div>
 
               <div className="border-t p-5 bg-white">
-                <button
-                  disabled={selectedComplaint.status === "resolved"}
+                <button disabled={selectedComplaint.status === "resolved"}
                   className={`w-full py-3.5 rounded-xl text-white text-base font-extrabold transition shadow-lg ${actionBg(selectedComplaint.status)}`}
-                  onClick={() => handleActionClick(selectedComplaint)}
-                >
+                  onClick={() => handleActionClick(selectedComplaint)}>
                   {actionLabel(selectedComplaint.status)}
                 </button>
               </div>
@@ -885,31 +1004,30 @@ const Notiftable = () => {
 
         {/* ── Deploy Tanod Modal ──────────────────────────────────────────── */}
         {showDeployModal && (
-          <div
-            className="fixed inset-0 z-60 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
-            onClick={() => setShowDeployModal(false)}
-          >
-            <div
-              className="bg-white rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-              onClick={(e) => e.stopPropagation()}
-            >
+          <div className="fixed inset-0 z-60 p-4 bg-black/50 backdrop-blur-sm flex items-center justify-center"
+            onClick={() => setShowDeployModal(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}>
+
+              {/* Header */}
               <div className="bg-linear-to-r from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-3 text-white">
                   <div className="bg-white/20 p-2.5 rounded-xl"><FiShield size={20} /></div>
                   <div>
                     <h3 className="text-lg font-extrabold">Deploy Tanods</h3>
-                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">Select at least {MIN_TANODS} verified tanods to deploy</p>
+                    <p className="text-indigo-100 text-xs font-semibold mt-0.5">
+                      Select at least {MIN_TANODS} verified tanods to deploy
+                    </p>
                   </div>
                 </div>
-                <button
-                  className="text-white/80 hover:text-white hover:bg-white/15 rounded-full p-2 transition"
-                  onClick={() => setShowDeployModal(false)}
-                >
+                <button className="text-white/80 hover:text-white hover:bg-white/15 rounded-full p-2 transition"
+                  onClick={() => setShowDeployModal(false)}>
                   <FiX size={20} />
                 </button>
               </div>
 
               <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                {/* Complaint summary */}
                 <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3">
                   <p className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider">Complaint</p>
                   <p className="text-sm font-bold text-gray-800 mt-1 line-clamp-2">{deployTarget?.message || "—"}</p>
@@ -918,6 +1036,46 @@ const Notiftable = () => {
                   </p>
                 </div>
 
+                {/* ── Shift Tabs ── */}
+                <div className="flex rounded-xl overflow-hidden border border-gray-200 bg-gray-100 p-1 gap-1">
+                  {[
+                    { key: "day",   label: "Day Shift",   icon: <FiSun  size={14} />, locked: currentShift === "night" },
+                    { key: "night", label: "Night Shift", icon: <FiMoon size={14} />, locked: currentShift === "day"   },
+                  ].map(({ key, label, icon, locked }) => (
+                    <button
+                      key={key}
+                      onClick={() => !locked && handleShiftTabChange(key)}
+                      disabled={locked}
+                      title={locked ? `Cannot select ${label} tanods during ${currentShift} shift` : ""}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                        deployShiftTab === key
+                          ? key === "day"
+                            ? "bg-amber-500 text-white shadow-md"
+                            : "bg-indigo-700 text-white shadow-md"
+                          : locked
+                          ? "text-gray-300 cursor-not-allowed"
+                          : "text-gray-600 hover:bg-white hover:text-gray-900"
+                      }`}
+                    >
+                      {icon}
+                      {label}
+                      {locked && (
+                        <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-400 ml-1">
+                          Locked
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Shift context hint */}
+                <p className="text-[11px] font-semibold text-gray-500 -mt-1">
+                  {currentShift === "day"
+                    ? "🌅 Day shift active (8 AM – 5 PM). Night shift tab is locked."
+                    : "🌙 Night shift active (7 PM – 5 AM). Day shift tab is locked."}
+                </p>
+
+                {/* Error */}
                 {deployError && (
                   <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
                     <p className="text-xs font-extrabold text-red-700 uppercase tracking-wider">⚠ Deployment Error</p>
@@ -925,28 +1083,68 @@ const Notiftable = () => {
                   </div>
                 )}
 
-                <div className="relative">
-                  <FiSearch className="absolute left-3 top-1/2 text-gray-400 -translate-y-1/2" size={16} />
-                  <input
-                    type="text"
-                    placeholder="Search tanod by name or role..."
-                    className="w-full pl-9 pr-4 py-2.5 text-sm font-semibold border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-4 focus:ring-indigo-200"
-                    value={tanodSearch}
-                    onChange={(e) => { setTanodSearch(e.target.value); setTanodPage(1); }}
-                  />
+                {/* Search + Select All row */}
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <FiSearch className="absolute left-3 top-1/2 text-gray-400 -translate-y-1/2" size={16} />
+                    <input type="text" placeholder="Search tanod by name..."
+                      className="w-full pl-9 pr-4 py-2.5 text-sm font-semibold border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                      value={tanodSearch}
+                      onChange={(e) => { setTanodSearch(e.target.value); setTanodPage(1); }}
+                    />
+                  </div>
+                  {/* Select All button */}
+                  {filteredTanods.length > 0 && (() => {
+                    const availableUids = filteredTanods
+                      .filter((t) => t.deploymentStatus !== "deployed")
+                      .map((t) => t.uid);
+                    const allSelected = availableUids.length > 0 &&
+                      availableUids.every((uid) => selectedTanods.has(uid));
+                    return (
+                      <button
+                        onClick={() => {
+                          if (allSelected) {
+                            setSelectedTanods((prev) => {
+                              const next = new Set(prev);
+                              availableUids.forEach((uid) => next.delete(uid));
+                              return next;
+                            });
+                          } else {
+                            setSelectedTanods((prev) => {
+                              const next = new Set(prev);
+                              availableUids.forEach((uid) => next.add(uid));
+                              return next;
+                            });
+                          }
+                        }}
+                        disabled={availableUids.length === 0}
+                        className={`shrink-0 px-4 py-2.5 rounded-xl text-sm font-extrabold border transition whitespace-nowrap ${
+                          allSelected
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
+                            : "bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50"
+                        } disabled:opacity-40 disabled:cursor-not-allowed`}
+                      >
+                        {allSelected ? "✓ Deselect All" : "Select All"}
+                      </button>
+                    );
+                  })()}
                 </div>
 
+                {/* Table */}
                 {filteredTanods.length === 0 ? (
-                  <p className="text-sm text-gray-500 font-semibold text-center py-6">No verified tanods available for deployment.</p>
+                  <p className="text-sm text-gray-500 font-semibold text-center py-6">
+                    No verified {deployShiftTab} shift tanods available.
+                  </p>
                 ) : (
                   <>
                     <div className="overflow-x-auto rounded-xl border border-gray-200">
                       <table className="w-full text-left">
                         <thead>
                           <tr className="bg-slate-50 border-b border-gray-200">
-                            <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider w-8"></th>
+                            <th className="px-4 py-3 w-8"></th>
                             <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider">Name</th>
                             <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider">Role</th>
+                            <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider">Shift</th>
                             <th className="px-4 py-3 text-xs font-extrabold text-gray-600 uppercase tracking-wider">Status</th>
                           </tr>
                         </thead>
@@ -954,9 +1152,9 @@ const Notiftable = () => {
                           {paginatedTanods.map((t) => {
                             const isDeployed = t.deploymentStatus === "deployed";
                             const isSelected = selectedTanods.has(t.uid);
+                            const tanodShift = getTanodShift(t);
                             return (
-                              <tr
-                                key={t.uid}
+                              <tr key={t.uid}
                                 onClick={() => { if (!isDeployed) toggleTanod(t.uid); }}
                                 className={`border-b border-gray-100 transition ${
                                   isDeployed
@@ -964,8 +1162,7 @@ const Notiftable = () => {
                                     : isSelected
                                     ? "bg-indigo-50 ring-1 ring-indigo-300 cursor-pointer"
                                     : "hover:bg-gray-50 cursor-pointer"
-                                }`}
-                              >
+                                }`}>
                                 <td className="px-4 py-3">
                                   <input type="checkbox" checked={isSelected} disabled={isDeployed}
                                     onChange={() => toggleTanod(t.uid)} className="accent-indigo-600 w-4 h-4" />
@@ -980,10 +1177,24 @@ const Notiftable = () => {
                                 </td>
                                 <td className="px-4 py-3 text-xs font-semibold text-gray-500 capitalize">{t.position || "Tanod"}</td>
                                 <td className="px-4 py-3">
-                                  <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
-                                    isDeployed ? "bg-red-100 text-red-700 ring-1 ring-red-200" : "bg-green-100 text-green-700 ring-1 ring-green-200"
+                                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
+                                    tanodShift === "day"
+                                      ? "bg-amber-100 text-amber-700 ring-1 ring-amber-200"
+                                      : tanodShift === "night"
+                                      ? "bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200"
+                                      : "bg-gray-100 text-gray-500 ring-1 ring-gray-200"
                                   }`}>
-                                    {isDeployed ? "Deployed" : "Verified"}
+                                    {tanodShift === "day" ? <FiSun size={11} /> : tanodShift === "night" ? <FiMoon size={11} /> : null}
+                                    {tanodShift === "day" ? "Day (8AM–5PM)" : tanodShift === "night" ? "Night (7PM–5AM)" : "Unset"}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
+                                    isDeployed
+                                      ? "bg-red-100 text-red-700 ring-1 ring-red-200"
+                                      : "bg-green-100 text-green-700 ring-1 ring-green-200"
+                                  }`}>
+                                    {isDeployed ? "Deployed" : "Available"}
                                   </span>
                                 </td>
                               </tr>
@@ -1014,6 +1225,7 @@ const Notiftable = () => {
                 )}
               </div>
 
+              {/* Footer */}
               <div className="border-t px-6 py-4 bg-slate-50 space-y-3 shrink-0">
                 {selectedTanods.size > 0 && (
                   <div className="flex items-center gap-2 flex-wrap">
@@ -1039,7 +1251,9 @@ const Notiftable = () => {
                   </button>
                   <button onClick={confirmDeploy} disabled={selectedTanods.size < MIN_TANODS || deploying}
                     className={`flex-1 py-3 rounded-xl text-white font-extrabold text-sm transition shadow-md ${
-                      selectedTanods.size < MIN_TANODS || deploying ? "bg-gray-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
+                      selectedTanods.size < MIN_TANODS || deploying
+                        ? "bg-gray-300 cursor-not-allowed"
+                        : "bg-indigo-600 hover:bg-indigo-700"
                     }`}>
                     {deploying ? "Deploying…" : `Deploy ${selectedTanods.size} Tanod${selectedTanods.size !== 1 ? "s" : ""} →`}
                   </button>

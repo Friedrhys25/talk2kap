@@ -7,6 +7,7 @@ import {
   FiX, FiSearch, FiCheck, FiMail,
   FiChevronLeft, FiChevronRight,
   FiCalendar, FiHash, FiUserX, FiTrash2,
+  FiAlertTriangle,
 } from "react-icons/fi";
 import {
   getFirestore,
@@ -47,6 +48,72 @@ const formatDate = (value) => {
     minute: "2-digit",
     hour12: true,
   });
+};
+
+// ── Confirmation Modal ────────────────────────────────────────────────────────
+const ConfirmModal = ({ open, onClose, onConfirm, title, message, confirmLabel, confirmColor = "rose" }) => {
+  if (!open) return null;
+
+  const colorMap = {
+    rose: {
+      icon: "bg-rose-100 text-rose-600",
+      btn: "bg-rose-600 hover:bg-rose-700 text-white",
+      border: "border-rose-200",
+    },
+    gray: {
+      icon: "bg-gray-100 text-gray-600",
+      btn: "bg-gray-700 hover:bg-gray-800 text-white",
+      border: "border-gray-200",
+    },
+  };
+  const colors = colorMap[confirmColor] || colorMap.rose;
+
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-[9999] p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-white/60 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Top accent bar */}
+        <div className={`h-1 w-full ${confirmColor === "rose" ? "bg-rose-500" : "bg-gray-500"}`} />
+
+        <div className="p-6 space-y-4">
+          {/* Icon + title */}
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-xl ${colors.icon} shrink-0`}>
+              <FiAlertTriangle size={22} />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-gray-900">{title}</h3>
+              <p className="text-sm text-gray-500 font-medium mt-0.5">{message}</p>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className={`border-t ${colors.border}`} />
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 font-extrabold text-sm hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { onConfirm(); onClose(); }}
+              className={`flex-1 py-2.5 rounded-xl font-extrabold text-sm transition shadow-md ${colors.btn}`}
+            >
+              {confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // ── Pagination ───────────────────────────────────────────────────────────────
@@ -101,6 +168,8 @@ const Pagination = ({ currentPage, totalPages, onPageChange, totalItems, pageSiz
 // ── Detail Modal ─────────────────────────────────────────────────────────────
 const UserDetailModal = ({ user, onClose, onDisable, onDelete }) => {
   const [previewImage, setPreviewImage] = useState(null);
+  const [confirmDisable, setConfirmDisable] = useState(false);
+  const [confirmDelete, setConfirmDelete]   = useState(false);
 
   if (!user) return null;
 
@@ -195,7 +264,7 @@ const UserDetailModal = ({ user, onClose, onDisable, onDelete }) => {
             <div className="border-t pt-4 space-y-3">
               <div className="flex gap-3">
                 <button
-                  onClick={() => onDisable(user.id)}
+                  onClick={() => setConfirmDisable(true)}
                   disabled={user.disabled}
                   className={`flex-1 py-3 rounded-xl font-extrabold transition shadow-md inline-flex items-center justify-center gap-2 ${
                     user.disabled
@@ -207,7 +276,7 @@ const UserDetailModal = ({ user, onClose, onDisable, onDelete }) => {
                   {user.disabled ? "Account Disabled" : "Disable Account"}
                 </button>
                 <button
-                  onClick={() => onDelete(user.id)}
+                  onClick={() => setConfirmDelete(true)}
                   className="flex-1 py-3 rounded-xl bg-rose-50 text-rose-700 font-extrabold border border-rose-200 hover:bg-rose-100 transition inline-flex items-center justify-center gap-2"
                 >
                   <FiTrash2 size={16} /> Delete User
@@ -227,7 +296,7 @@ const UserDetailModal = ({ user, onClose, onDisable, onDelete }) => {
       {/* Fullscreen image preview */}
       {previewImage && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-9999"
+          className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[9999]"
           onClick={() => setPreviewImage(null)}
         >
           <img src={previewImage} alt="Preview" className="max-w-[90%] max-h-[90%] rounded-lg shadow-2xl" />
@@ -237,6 +306,28 @@ const UserDetailModal = ({ user, onClose, onDisable, onDelete }) => {
           >✕</button>
         </div>
       )}
+
+      {/* Disable confirmation modal */}
+      <ConfirmModal
+        open={confirmDisable}
+        onClose={() => setConfirmDisable(false)}
+        onConfirm={() => onDisable(user.id)}
+        title="Disable Account"
+        message="The user will no longer be able to log in. This action can be reviewed later."
+        confirmLabel="Yes, Disable"
+        confirmColor="gray"
+      />
+
+      {/* Delete confirmation modal */}
+      <ConfirmModal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => onDelete(user.id)}
+        title="Delete User"
+        message="This will permanently remove the user and all their data. This cannot be undone."
+        confirmLabel="Yes, Delete"
+        confirmColor="rose"
+      />
     </>
   );
 };
@@ -252,7 +343,6 @@ const Usertable = () => {
 
   // ── Disable user ──────────────────────────────────────────────────────────
   const disableUser = async (id) => {
-    if (!window.confirm("Disable this account? The user will no longer be able to log in.")) return;
     try {
       await updateDoc(doc(firestore, "users", id), { disabled: true });
       setUsers((prev) => prev.map((u) => u.id === id ? { ...u, disabled: true } : u));
@@ -265,7 +355,6 @@ const Usertable = () => {
 
   // ── Delete user ───────────────────────────────────────────────────────────
   const deleteUser = async (id) => {
-    if (!window.confirm("Delete this user permanently? This cannot be undone.")) return;
     try {
       await deleteDoc(doc(firestore, "users", id));
       setUsers((prev) => prev.filter((u) => u.id !== id));
@@ -530,7 +619,12 @@ const Usertable = () => {
 
       {/* Detail Modal */}
       {selectedUser && (
-        <UserDetailModal user={selectedUser} onClose={() => setSelectedUser(null)} onDisable={disableUser} onDelete={deleteUser} />
+        <UserDetailModal
+          user={selectedUser}
+          onClose={() => setSelectedUser(null)}
+          onDisable={disableUser}
+          onDelete={deleteUser}
+        />
       )}
     </div>
   );

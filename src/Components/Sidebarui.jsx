@@ -57,9 +57,13 @@ export const Example = () => {
   const [pendingValidationsCount, setPendingValidationsCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const audioRef = useRef(null);
-  const previousValidationCountRef = useRef(0);
-  const previousComplaintsCountRef = useRef(0);
-  const sirenPlayedRef = useRef(false);
+
+  // Track the highest urgent+pending count seen this session.
+  // The siren fires once when the count RISES above the last known peak.
+  // It will only be eligible to fire again when the count drops back to 0
+  // (i.e. all urgent complaints were resolved) AND then rises again.
+  const previousUrgentPendingCountRef = useRef(0); // last recalc value
+  const sirenFiredForPeakRef = useRef(0);           // the count level we already fired at
 
   // ── Firestore listeners ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -67,39 +71,52 @@ export const Example = () => {
     const employeeRef = collection(firestore, "employee");
     const innerUnsubs = [];
 
-    const complaintsMap = {};
-    const validationMap = {};
+    const complaintsMap   = {};  // userId → { count, urgentPendingCount }
+    const validationMap   = {};
     const tanodValidationMap = {};
-    const messagesMap   = {};
+    const messagesMap     = {};
 
     const recalc = () => {
-      const newComplaintsCount = Object.values(complaintsMap).reduce((a, b) => a + b, 0);
+      // Total pending (all urgencies) — used for sidebar badge
+      const newComplaintsCount = Object.values(complaintsMap)
+        .reduce((a, b) => a + (b.count || 0), 0);
       setPendingComplaintsCount(newComplaintsCount);
+
       const residentValidations = Object.values(validationMap).filter(Boolean).length;
       const tanodValidations = Object.values(tanodValidationMap).filter(Boolean).length;
-      const newValidationCount = residentValidations + tanodValidations;
-      setPendingValidationsCount(newValidationCount);
+      setPendingValidationsCount(residentValidations + tanodValidations);
       setUnreadMessagesCount(Object.values(messagesMap).filter(Boolean).length);
-      
-      // Play siren sound ONLY ONCE when new complaints arrive (complaint count increases)
-      if (newComplaintsCount > previousComplaintsCountRef.current && !sirenPlayedRef.current && audioRef.current) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(err => console.log("Audio play failed:", err));
-        sirenPlayedRef.current = true;
+
+      // ── Siren logic ────────────────────────────────────────────────────────
+      const newUrgentPendingCount = Object.values(complaintsMap)
+        .reduce((a, b) => a + (b.urgentPending || 0), 0);
+
+      // When count drops to 0, reset so the siren can fire again next time
+      // a NEW urgent complaint arrives.
+      if (newUrgentPendingCount === 0) {
+        sirenFiredForPeakRef.current = 0;
       }
-      
-      // Reset siren flag when all complaints are resolved
-      if (newComplaintsCount === 0) {
-        sirenPlayedRef.current = false;
+
+      // Fire siren ONLY when:
+      //   1. There are urgent+pending complaints right now, AND
+      //   2. The current count is strictly higher than the level we already
+      //      fired for (prevents re-firing on page/tab navigation or re-renders)
+      if (
+        newUrgentPendingCount > 0 &&
+        newUrgentPendingCount > sirenFiredForPeakRef.current
+      ) {
+        sirenFiredForPeakRef.current = newUrgentPendingCount;
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0;
+          audioRef.current.play().catch(err => console.log("Audio play failed:", err));
+        }
       }
-      
-      previousComplaintsCountRef.current = newComplaintsCount;
-      previousValidationCountRef.current = newValidationCount;
+
+      previousUrgentPendingCountRef.current = newUrgentPendingCount;
     };
 
     // ── Tanods (employees) validation listener ───────────────────────────────
     const unsubEmployees = onSnapshot(employeeRef, (employeeSnapshot) => {
-      tanodValidationMap;
       employeeSnapshot.forEach((empDoc) => {
         const empId = empDoc.id;
         const empData = empDoc.data();
@@ -123,10 +140,15 @@ export const Example = () => {
         const complaintsRef = collection(firestore, "users", userId, "userComplaints");
         const unsubComplaints = onSnapshot(complaintsRef, (complaintsSnap) => {
           let pendingCount = 0;
+          let urgentPendingCount = 0;
 
           complaintsSnap.forEach((cDoc) => {
             const c = cDoc.data();
-            if ((c.status || "pending") === "pending") pendingCount++;
+            const isPending = (c.status || "pending") === "pending";
+            const isUrgent  = (c.label || "").toLowerCase() === "urgent";
+
+            if (isPending) pendingCount++;
+            if (isPending && isUrgent) urgentPendingCount++;
 
             // ── chat subcollection for unread messages ──────────────────────
             const chatRef = collection(firestore, "users", userId, "userComplaints", cDoc.id, "chat");
@@ -145,7 +167,8 @@ export const Example = () => {
             innerUnsubs.push(unsubChat);
           });
 
-          complaintsMap[userId] = pendingCount;
+          // Store both counts per user
+          complaintsMap[userId] = { count: pendingCount, urgentPending: urgentPendingCount };
           recalc();
         });
 
@@ -162,7 +185,7 @@ export const Example = () => {
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
-      {/* Audio alert for new complaints */}
+      {/* Audio alert — only plays for urgent complaints */}
       <audio 
         ref={audioRef} 
         src="/src/assets/The Purge Siren - Sound Effect for editing.mp3"

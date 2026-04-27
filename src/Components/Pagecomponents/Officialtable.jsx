@@ -35,6 +35,77 @@ const emptyForm = {
   picture: "",
 };
 
+// ── Suffix options ────────────────────────────────────────────────────────────
+const suffixOptions = ["", "Jr.", "Sr.", "II", "III", "IV", "V"];
+
+// ── Email validation (same as EmployeeTable) ──────────────────────────────────
+const VALID_EMAIL_DOMAINS = [
+  "gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com",
+  "proton.me", "protonmail.com", "zoho.com", "aol.com", "gmx.com",
+  "mail.com", "yandex.com", "fastmail.com", "tutanota.com", "hushmail.com",
+  "rediffmail.com", "lycos.com", "mail.ru", "inbox.com", "runbox.com",
+];
+
+const isValidEmail = (email) => {
+  const trimmed = email.trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmed)) return false;
+  const domain = trimmed.split("@")[1];
+  return VALID_EMAIL_DOMAINS.includes(domain);
+};
+
+// ── Phone validation (same as EmployeeTable) ──────────────────────────────────
+const isValidPhoneNumber = (number) => {
+  if (!/^09\d{9}$/.test(number)) return false;
+  const digits = number.slice(2);
+
+  if (/^(.)\1{8}$/.test(digits)) return false;
+
+  const isSequentialAsc = [...digits].every(
+    (d, i, arr) => i === 0 || Number(d) === Number(arr[i - 1]) + 1
+  );
+  if (isSequentialAsc) return false;
+
+  const isSequentialDesc = [...digits].every(
+    (d, i, arr) => i === 0 || Number(d) === Number(arr[i - 1]) - 1
+  );
+  if (isSequentialDesc) return false;
+
+  const digitCounts = {};
+  for (const d of digits) digitCounts[d] = (digitCounts[d] || 0) + 1;
+  if (Object.values(digitCounts).some((count) => count >= 7)) return false;
+
+  if (/(.{2})\1{2}/.test(digits)) return false;
+  if (/(.{3})\1{1}/.test(digits)) return false;
+
+  for (let i = 0; i <= digits.length - 5; i++) {
+    const slice = digits.slice(i, i + 5);
+    const isAscSeq = [...slice].every(
+      (d, j, arr) => j === 0 || Number(d) === Number(arr[j - 1]) + 1
+    );
+    if (isAscSeq) return false;
+  }
+
+  for (let i = 0; i <= digits.length - 5; i++) {
+    const slice = digits.slice(i, i + 5);
+    const isDescSeq = [...slice].every(
+      (d, j, arr) => j === 0 || Number(d) === Number(arr[j - 1]) - 1
+    );
+    if (isDescSeq) return false;
+  }
+
+  return true;
+};
+
+const getPhoneError = (number) => {
+  if (!number) return null;
+  if (!/^09/.test(number)) return "Phone number must start with 09.";
+  if (number.length < 11) return `${number.length}/11 — must start with 09`;
+  if (!/^09\d{9}$/.test(number)) return "Must be exactly 11 digits starting with 09.";
+  if (!isValidPhoneNumber(number)) return "Invalid number — avoid repeating or sequential digits (e.g. 09111111111, 09123456789).";
+  return null;
+};
+
 // Capitalize first letter only, preserve rest
 const capitalizeFirst = (str) => {
   if (!str) return str;
@@ -51,7 +122,6 @@ const splitFullName = (fullName = "") => {
   if (parts.length === 1) return { firstName: parts[0], middleInitial: "", lastName: "", suffix: "" };
   if (parts.length === 2) return { firstName: parts[0], middleInitial: "", lastName: parts[1], suffix: "" };
 
-  // Check if last part is a known suffix
   const knownSuffixes = ["Jr.", "Sr.", "Jr", "Sr", "II", "III", "IV", "V"];
   const lastPart = parts[parts.length - 1];
   const hasSuffix = knownSuffixes.includes(lastPart);
@@ -68,11 +138,6 @@ const splitFullName = (fullName = "") => {
   const middleInitial = parts[parts.length - 2];
   const firstName = parts.slice(0, parts.length - 2).join(" ");
   return { firstName, middleInitial, lastName, suffix: "" };
-};
-
-// Phone validation: must start with 09 and be exactly 11 digits
-const isValidPhoneNumber = (number) => {
-  return /^09\d{9}$/.test(number);
 };
 
 /* =======================
@@ -246,7 +311,6 @@ export default function OfficialTable() {
       "Kagawad",
       "Secretary",
       "Treasurer",
-      
     ],
     []
   );
@@ -272,7 +336,6 @@ export default function OfficialTable() {
         Kagawad: 1,
         Secretary: 2,
         Treasurer: 3,
-       
       };
       list.sort((a, b) => {
         const ao = posOrder[a.position] ?? 99;
@@ -299,7 +362,7 @@ export default function OfficialTable() {
     });
   }, [officials, searchTerm, positionFilter]);
 
-  // ── Input handlers with constraints ──────────────────────────────────────
+  // ── Input handlers ────────────────────────────────────────────────────────
   const handleFirstNameChange = (e) => {
     const raw = e.target.value.slice(0, 20);
     const capitalized = capitalizeFirst(raw);
@@ -315,34 +378,44 @@ export default function OfficialTable() {
   };
 
   const handlePhoneChange = (e) => {
-    // Only allow digits, max 11
     const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
     setForm((prev) => ({ ...prev, contactNumber: digits }));
     setFormErrors((p) => ({ ...p, contactNumber: undefined }));
   };
 
   const handleEmailChange = (e) => {
-    const val = e.target.value.slice(0, 50);
+    const val = e.target.value.slice(0, 80);
     setForm((prev) => ({ ...prev, email: val }));
     setFormErrors((p) => ({ ...p, email: undefined }));
   };
 
   const handleSuffixChange = (e) => {
-    const val = e.target.value.slice(0, 5);
-    setForm((prev) => ({ ...prev, suffix: val }));
+    setForm((prev) => ({ ...prev, suffix: e.target.value }));
   };
 
-  // VALIDATION before showing confirm modal
+  // VALIDATION
   const validateForm = () => {
     const errors = {};
     if (!form.firstName.trim()) errors.firstName = "First name is required.";
     if (!form.lastName.trim()) errors.lastName = "Last name is required.";
-    if (form.contactNumber && !isValidPhoneNumber(form.contactNumber)) {
-      errors.contactNumber = "Phone number must start with 09 and be 11 digits.";
+
+    // Email validation — same as EmployeeTable
+    if (form.email.trim()) {
+      if (!isValidEmail(form.email)) {
+        errors.email = "Invalid email. Use a valid provider (e.g. gmail.com, yahoo.com).";
+      }
     }
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      errors.email = "Invalid email format.";
+
+    // Phone validation — same as EmployeeTable
+    if (form.contactNumber) {
+      const phoneErr = getPhoneError(form.contactNumber);
+      if (form.contactNumber.length < 11) {
+        errors.contactNumber = "Phone number must be 11 digits.";
+      } else if (phoneErr) {
+        errors.contactNumber = phoneErr;
+      }
     }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -750,18 +823,20 @@ export default function OfficialTable() {
                     </div>
                   </div>
 
-                  {/* Suffix */}
+                  {/* ── Suffix DROPDOWN ── */}
                   <div className="col-span-12 sm:col-span-2">
                     <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1">
                       Suffix
                     </label>
-                    <input
-                      placeholder="Jr."
+                    <select
                       value={form.suffix}
                       onChange={handleSuffixChange}
-                      maxLength={5}
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-center"
-                    />
+                    >
+                      {suffixOptions.map((s) => (
+                        <option key={s} value={s}>{s || "None"}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -792,24 +867,30 @@ export default function OfficialTable() {
 
               {/* Email & Contact */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Email */}
                 <div>
-                <label className="flex text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1 items-center gap-1">
+                  <label className="flex text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1 items-center gap-1">
                     <FiMail size={11} /> Email
                   </label>
                   <input
                     type="email"
-                    placeholder="e.g., juan@example.com"
+                    placeholder="e.g., juan@gmail.com"
                     value={form.email}
                     onChange={handleEmailChange}
-                    maxLength={50}
+                    maxLength={80}
                     className={`w-full border rounded-xl px-4 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
                       ${formErrors.email ? "border-red-400" : "border-gray-200"}`}
                   />
                   <div className="flex items-center justify-between mt-1">
-                    {formErrors.email && <p className="text-xs text-red-500">{formErrors.email}</p>}
-                    <p className="text-xs text-gray-400 ml-auto">{form.email.length}/50</p>
+                    {formErrors.email
+                      ? <p className="text-xs text-red-500">{formErrors.email}</p>
+                      : <p className="text-xs text-gray-400">Use a valid provider (e.g. gmail.com, yahoo.com)</p>
+                    }
+                    <p className="text-xs text-gray-400 ml-auto shrink-0">{form.email.length}/80</p>
                   </div>
                 </div>
+
+                {/* Phone */}
                 <div>
                   <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1 items-center gap-1">
                     <FiPhone size={11} /> Contact Number
@@ -826,14 +907,22 @@ export default function OfficialTable() {
                   {formErrors.contactNumber ? (
                     <p className="text-xs text-red-500 mt-1">{formErrors.contactNumber}</p>
                   ) : (
-                    <p className="text-xs text-gray-400 mt-1">{form.contactNumber.length}/11 — must start with 09</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {form.contactNumber.length}/11 — must start with 09
+                      {form.contactNumber.length === 11 && isValidPhoneNumber(form.contactNumber) && (
+                        <span className="text-emerald-600 font-bold ml-1">✓ Valid</span>
+                      )}
+                      {form.contactNumber.length === 11 && !isValidPhoneNumber(form.contactNumber) && (
+                        <span className="text-red-500 font-bold ml-1">✗ Invalid</span>
+                      )}
+                    </p>
                   )}
                 </div>
               </div>
 
               {/* Picture */}
               <div>
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1  items-center gap-1">
+                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-600 mb-1 items-center gap-1">
                   <FiImage size={11} /> Picture
                 </label>
                 <input

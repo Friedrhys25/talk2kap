@@ -745,9 +745,8 @@ const Validations = () => {
         <div className="flex items-center gap-3">
           <FiUser className="text-indigo-600" size={22} />
           <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight">Resident Validations</h1>
-          <span className="ml-2 inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-50 text-indigo-600 border border-indigo-200">
-            <FiClock size={11} /> Newest First
-          </span>
+        
+          
         </div>
 
         {/* Resident search & purok filter */}
@@ -924,12 +923,8 @@ const Validations = () => {
         <div className="flex items-center gap-3">
           <FiShield className="text-indigo-600" size={22} />
           <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight">Tanod / Employee Validations</h1>
-          <span className="ml-2 px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-100 text-indigo-700 border border-indigo-200">
-            {tanodStats.total} Awaiting
-          </span>
-          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-50 text-indigo-600 border border-indigo-200">
-            <FiClock size={11} /> Newest First
-          </span>
+       
+          
         </div>
 
         {/* Tanod search & purok filter */}
