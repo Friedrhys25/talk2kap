@@ -1,8 +1,9 @@
-// Sidebarui.jsx - Updated with Emergency Hotlines + User List + Page Persistence on Reload
+// Sidebarui.jsx - Updated with Emergency Hotlines + User List + Page Persistence on Reload + Tanod Reports
 import React, { useState, useEffect, useRef } from "react";
 import {
   FiAlertCircle, FiMail, FiArrowLeftCircle, FiChevronsRight,
   FiBell, FiHome, FiBarChart, FiUsers, FiX, FiUser, FiPhone, FiList,
+  FiShield,
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -13,15 +14,16 @@ import {
 } from "firebase/firestore";
 import app from "../firebaseConfig";
 
-import Dashpage       from "../Pages/Sidebarpages/Dashpage";
-import Salepage       from "../Pages/Sidebarpages/Notifpage";
-import Messagepage    from "../Pages/Sidebarpages/Messagepage";
-import Uservalid      from "../Pages/Sidebarpages/Uservalid";
-import Userpage       from "../Pages/Sidebarpages/Userpage";
-import Reportspage    from "../Pages/Sidebarpages/Reportspage";
-import Officialpage   from "../Pages/Sidebarpages/Officialpage";
-import Employeepage   from "../Pages/Sidebarpages/Employeepage";
-import Emergencypage  from "../Pages/Sidebarpages/emergencypage";
+import Dashpage           from "../Pages/Sidebarpages/Dashpage";
+import Salepage           from "../Pages/Sidebarpages/Notifpage";
+import Messagepage        from "../Pages/Sidebarpages/Messagepage";
+import Uservalid          from "../Pages/Sidebarpages/Uservalid";
+import Userpage           from "../Pages/Sidebarpages/Userpage";
+import Reportspage        from "../Pages/Sidebarpages/Reportspage";
+import Reportstanodpage   from "../Pages/Sidebarpages/Reportstanodpage";
+import Officialpage       from "../Pages/Sidebarpages/Officialpage";
+import Employeepage       from "../Pages/Sidebarpages/Employeepage";
+import Emergencypage      from "../Pages/Sidebarpages/emergencypage";
 
 
 const firestore = getFirestore(app);
@@ -52,7 +54,6 @@ const optionVariants = {
 
 /* ── Page wrapper ────────────────────────────────────────────────────────────*/
 export const Example = () => {
-  // ✅ FIX: Read from sessionStorage on mount so page survives reload
   const [selected, setSelected] = useState(() => {
     return sessionStorage.getItem("activePage") || "Dashboard";
   });
@@ -62,26 +63,24 @@ export const Example = () => {
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const audioRef = useRef(null);
 
-  // ✅ FIX: Wrapper that saves to sessionStorage before updating state
   const handleSetSelected = (page) => {
     sessionStorage.setItem("activePage", page);
     setSelected(page);
   };
 
-  // Track the highest urgent+pending count seen this session.
   const previousUrgentPendingCountRef = useRef(0);
   const sirenFiredForPeakRef = useRef(0);
 
-  // ── Firestore listeners ─────────────────────────────────────────────────────
+  /* ── Firestore listeners ──────────────────────────────────────────────────*/
   useEffect(() => {
-    const usersRef = collection(firestore, "users");
+    const usersRef    = collection(firestore, "users");
     const employeeRef = collection(firestore, "employee");
     const innerUnsubs = [];
 
-    const complaintsMap   = {};
-    const validationMap   = {};
+    const complaintsMap      = {};
+    const validationMap      = {};
     const tanodValidationMap = {};
-    const messagesMap     = {};
+    const messagesMap        = {};
 
     const recalc = () => {
       const newComplaintsCount = Object.values(complaintsMap)
@@ -89,11 +88,10 @@ export const Example = () => {
       setPendingComplaintsCount(newComplaintsCount);
 
       const residentValidations = Object.values(validationMap).filter(Boolean).length;
-      const tanodValidations = Object.values(tanodValidationMap).filter(Boolean).length;
+      const tanodValidations    = Object.values(tanodValidationMap).filter(Boolean).length;
       setPendingValidationsCount(residentValidations + tanodValidations);
       setUnreadMessagesCount(Object.values(messagesMap).filter(Boolean).length);
 
-      // ── Siren logic ────────────────────────────────────────────────────────
       const newUrgentPendingCount = Object.values(complaintsMap)
         .reduce((a, b) => a + (b.urgentPending || 0), 0);
 
@@ -115,12 +113,11 @@ export const Example = () => {
       previousUrgentPendingCountRef.current = newUrgentPendingCount;
     };
 
-    // ── Tanods (employees) validation listener ───────────────────────────────
     const unsubEmployees = onSnapshot(employeeRef, (employeeSnapshot) => {
       employeeSnapshot.forEach((empDoc) => {
-        const empId = empDoc.id;
+        const empId   = empDoc.id;
         const empData = empDoc.data();
-        const status = (empData.idstatus || "").toLowerCase();
+        const status  = (empData.idstatus || "").toLowerCase();
         tanodValidationMap[empId] = status === "" || status === "pending";
       });
       recalc();
@@ -132,25 +129,22 @@ export const Example = () => {
         const userId   = userDoc.id;
         const userData = userDoc.data();
 
-        // ── validation badge ─────────────────────────────────────────────────
         const status = (userData.idstatus || "pending").toLowerCase();
         validationMap[userId] = status === "pending";
 
-        // ── complaints subcollection ─────────────────────────────────────────
         const complaintsRef = collection(firestore, "users", userId, "userComplaints");
         const unsubComplaints = onSnapshot(complaintsRef, (complaintsSnap) => {
-          let pendingCount = 0;
+          let pendingCount      = 0;
           let urgentPendingCount = 0;
 
           complaintsSnap.forEach((cDoc) => {
-            const c = cDoc.data();
+            const c         = cDoc.data();
             const isPending = (c.status || "pending") === "pending";
-            const isUrgent  = (c.label || "").toLowerCase() === "urgent";
+            const isUrgent  = (c.label  || "").toLowerCase() === "urgent";
 
             if (isPending) pendingCount++;
             if (isPending && isUrgent) urgentPendingCount++;
 
-            // ── chat subcollection for unread messages ──────────────────────
             const chatRef = collection(firestore, "users", userId, "userComplaints", cDoc.id, "chat");
             const mapKey  = `${userId}_${cDoc.id}`;
 
@@ -184,12 +178,10 @@ export const Example = () => {
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50">
-      {/* Audio alert — only plays for urgent complaints */}
-      <audio 
-        ref={audioRef} 
+      <audio
+        ref={audioRef}
         src="/src/assets/The Purge Siren - Sound Effect for editing.mp3"
       />
-      {/* Watermark */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -206,7 +198,7 @@ export const Example = () => {
       <div className="relative z-10 flex w-full h-full">
         <Sidebar
           selected={selected}
-          setSelected={handleSetSelected}  
+          setSelected={handleSetSelected}
           pendingComplaintsCount={pendingComplaintsCount}
           pendingValidationsCount={pendingValidationsCount}
           unreadMessagesCount={unreadMessagesCount}
@@ -273,7 +265,6 @@ const Sidebar = ({ selected, setSelected, pendingComplaintsCount, pendingValidat
   const navigate = useNavigate();
 
   const confirmLogout = () => {
-    // ✅ Also clear sessionStorage on logout so next login starts fresh
     sessionStorage.removeItem("activePage");
     localStorage.removeItem("isLoggedIn");
     setShowLogoutModal(false);
@@ -281,15 +272,16 @@ const Sidebar = ({ selected, setSelected, pendingComplaintsCount, pendingValidat
   };
 
   const menu = [
-    { title: "Dashboard",          Icon: FiHome },
-    { title: "Complaints",         Icon: FiAlertCircle, notifs: pendingComplaintsCount  > 0 ? pendingComplaintsCount  : null },
-    { title: "Messages",           Icon: FiMail,        notifs: unreadMessagesCount     > 0 ? unreadMessagesCount     : null },
-    { title: "Validations",        Icon: FiUser,        notifs: pendingValidationsCount > 0 ? pendingValidationsCount : null },
-    { title: "User List",          Icon: FiList },
-    { title: "Reports",            Icon: FiBarChart },
-    { title: "Barangay Officials", Icon: FiUsers },
-    { title: "Barangay Employees", Icon: FiUsers },
-    { title: "Emergency Hotlines", Icon: FiPhone },
+    { title: "Dashboard",            Icon: FiHome },
+    { title: "Complaints",           Icon: FiAlertCircle, notifs: pendingComplaintsCount  > 0 ? pendingComplaintsCount  : null },
+    { title: "Messages",             Icon: FiMail,        notifs: unreadMessagesCount     > 0 ? unreadMessagesCount     : null },
+    { title: "Validations",          Icon: FiUser,        notifs: pendingValidationsCount > 0 ? pendingValidationsCount : null },
+    { title: "User List",            Icon: FiList },
+    { title: "Reports",              Icon: FiBarChart },
+    { title: "Tanod Reports",        Icon: FiShield },
+    { title: "Barangay Officials",   Icon: FiUsers },
+    { title: "Barangay Employees",   Icon: FiUsers },
+    { title: "Emergency Hotlines",   Icon: FiPhone },
   ];
 
   return (
@@ -465,15 +457,16 @@ const ExampleContent = ({ selected }) => (
     transition={{ type: "spring", stiffness: 420, damping: 32 }}>
     <div className="h-full w-full overflow-y-auto">
       <AnimatePresence mode="wait">
-        {selected === "Dashboard"          && <PageWrap key="dashboard"  ><Dashpage      /></PageWrap>}
-        {selected === "Complaints"         && <PageWrap key="complaints" ><Salepage      /></PageWrap>}
-        {selected === "Messages"           && <PageWrap key="messages"   ><Messagepage   /></PageWrap>}
-        {selected === "Validations"        && <PageWrap key="validation" ><Uservalid     /></PageWrap>}
-        {selected === "User List"          && <PageWrap key="userlist"   ><Userpage      /></PageWrap>}
-        {selected === "Reports"            && <PageWrap key="reports"    ><Reportspage   /></PageWrap>}
-        {selected === "Barangay Officials" && <PageWrap key="officials"  ><Officialpage  /></PageWrap>}
-        {selected === "Barangay Employees" && <PageWrap key="employees"  ><Employeepage  /></PageWrap>}
-        {selected === "Emergency Hotlines" && <PageWrap key="emergency"  ><Emergencypage /></PageWrap>}
+        {selected === "Dashboard"          && <PageWrap key="dashboard"     ><Dashpage         /></PageWrap>}
+        {selected === "Complaints"         && <PageWrap key="complaints"    ><Salepage          /></PageWrap>}
+        {selected === "Messages"           && <PageWrap key="messages"      ><Messagepage       /></PageWrap>}
+        {selected === "Validations"        && <PageWrap key="validation"    ><Uservalid         /></PageWrap>}
+        {selected === "User List"          && <PageWrap key="userlist"      ><Userpage          /></PageWrap>}
+        {selected === "Reports"            && <PageWrap key="reports"       ><Reportspage       /></PageWrap>}
+        {selected === "Tanod Reports"      && <PageWrap key="tanodreports"  ><Reportstanodpage  /></PageWrap>}
+        {selected === "Barangay Officials" && <PageWrap key="officials"     ><Officialpage      /></PageWrap>}
+        {selected === "Barangay Employees" && <PageWrap key="employees"     ><Employeepage      /></PageWrap>}
+        {selected === "Emergency Hotlines" && <PageWrap key="emergency"     ><Emergencypage     /></PageWrap>}
       </AnimatePresence>
     </div>
   </motion.div>

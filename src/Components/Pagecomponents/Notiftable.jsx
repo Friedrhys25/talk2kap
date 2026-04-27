@@ -281,7 +281,7 @@ const Notiftable = () => {
     const unsub = onSnapshot(collection(firestore, "employee"), (snap) => {
       const list = snap.docs.map((d) => ({
         uid: d.id, ...d.data(),
-        fullName: [d.data().firstName, d.data().middleName, d.data().lastName]
+        fullName: [d.data().firstName, d.data().middleName, d.data().lastName, d.data().suffix]
           .filter(Boolean).join(" ").trim() || "Unknown",
       }));
       list.sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -300,7 +300,7 @@ const Notiftable = () => {
         usersSnap.forEach((userDoc) => {
           const userData = userDoc.data();
           const userId   = userDoc.id;
-          const fullName = [userData.firstName, userData.middleName, userData.lastName]
+          const fullName = [userData.firstName, userData.middleName, userData.lastName, userData.suffix]
             .filter(Boolean).join(" ").trim() || "Unknown";
           const unsub = onSnapshot(
             collection(firestore, "users", userId, "userComplaints"),

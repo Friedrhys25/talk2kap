@@ -202,7 +202,7 @@ function ErrorModal({ open, onClose, title, message, type = "error" }) {
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-[9999] p-4"
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-9999 p-4"
       onClick={onClose}
     >
       <div
@@ -262,7 +262,7 @@ function ConfirmModal({ open, onClose, onConfirm, title, message, confirmLabel, 
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-[9999] p-4"
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-9999 p-4"
       onClick={onClose}
     >
       <div
@@ -527,7 +527,7 @@ function EmployeeDetailModal({ employee, onClose, onEdit, onDelete, onDisable })
 
       {/* Fullscreen image preview */}
       {previewImage && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[9999]" onClick={() => setPreviewImage(null)}>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-9999" onClick={() => setPreviewImage(null)}>
           <img src={previewImage} alt="Preview" className="max-w-[90%] max-h-[90%] rounded-2xl shadow-2xl" />
           <button className="absolute top-6 right-6 text-white text-3xl font-bold hover:scale-110 transition-transform" onClick={() => setPreviewImage(null)}>✕</button>
         </div>
@@ -566,7 +566,7 @@ function SuccessToast({ message, onClose }) {
   }, [onClose]);
 
   return (
-    <div className="fixed top-6 right-6 z-[9999] animate-[slideInRight_0.4s_ease-out]">
+    <div className="fixed top-6 right-6 z-9999 animate-[slideInRight_0.4s_ease-out]">
       <style>{`
         @keyframes slideInRight {
           from { opacity: 0; transform: translateX(60px); }
@@ -601,7 +601,7 @@ function ConfirmAddModal({ form, onConfirm, onCancel, loading }) {
   ].filter(Boolean).join(" ");
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={onCancel}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-60 p-4" onClick={onCancel}>
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative border border-white/60 overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="h-1.5 w-full bg-linear-to-r from-indigo-500 via-purple-500 to-indigo-600" />
         <div className="p-7">

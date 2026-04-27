@@ -70,7 +70,7 @@ const ConfirmModal = ({ open, onClose, onConfirm, title, message, confirmLabel, 
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-[9999] p-4"
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-9999 p-4"
       onClick={onClose}
     >
       <div
@@ -296,7 +296,7 @@ const UserDetailModal = ({ user, onClose, onDisable, onDelete }) => {
       {/* Fullscreen image preview */}
       {previewImage && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[9999]"
+          className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-9999"
           onClick={() => setPreviewImage(null)}
         >
           <img src={previewImage} alt="Preview" className="max-w-[90%] max-h-[90%] rounded-lg shadow-2xl" />
