@@ -71,9 +71,7 @@ const capitalizeFirst = (str) => {
 const positionOptions = [
   "All Positions",
   "BARANGAY UTILITY",
-  "DAY CARE SERVICES",
   "VAWC",
-  "BNS",
   "BHW",
   "CHIEF BANTAY BAYAN",
   "BANTAY BAYAN",
@@ -748,12 +746,15 @@ export default function EmployeeTable() {
     const empQuery = query(empCol, where("isEmployee", "==", true), where("idstatus", "==", "verified"));
     const unsubscribe = onSnapshot(empQuery, (snapshot) => {
       const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      // ── UPDATED: Sort alphabetically by firstName, then lastName as tiebreaker ──
       list.sort((a, b) => {
-        const lastNameA = (a.lastName || "").toLowerCase();
-        const lastNameB = (b.lastName || "").toLowerCase();
-        if (lastNameA !== lastNameB) return lastNameA.localeCompare(lastNameB);
-        return (a.firstName || "").toLowerCase().localeCompare((b.firstName || "").toLowerCase());
+        const firstNameA = (a.firstName || "").toLowerCase();
+        const firstNameB = (b.firstName || "").toLowerCase();
+        if (firstNameA !== firstNameB) return firstNameA.localeCompare(firstNameB);
+        return (a.lastName || "").toLowerCase().localeCompare((b.lastName || "").toLowerCase());
       });
+
       setEmployees(list);
     });
     return () => unsubscribe();
@@ -951,7 +952,6 @@ export default function EmployeeTable() {
   const handleAddClick = () => {
     if (!validateForm()) return;
 
-    // ── Check duplicate email ─────────────────────────────────────────────
     if (isEmailDuplicate(form.email)) {
       showError(
         "Email Already Exists",
@@ -961,7 +961,6 @@ export default function EmployeeTable() {
       return;
     }
 
-    // ── Check duplicate phone ─────────────────────────────────────────────
     if (isPhoneDuplicate(form.number)) {
       showError(
         "Phone Number Already in Use",
@@ -997,7 +996,6 @@ export default function EmployeeTable() {
       const data = await res.json();
       if (!res.ok) {
         setShowConfirm(false);
-        // Map common backend errors to friendly modal messages
         const msg = (data.error || "").toLowerCase();
         if (msg.includes("email") && (msg.includes("already") || msg.includes("exists") || msg.includes("in use"))) {
           showError(
@@ -1064,7 +1062,6 @@ export default function EmployeeTable() {
     if (!editing) return;
     if (!validateForm()) return;
 
-    // ── Check duplicate email (exclude self) ──────────────────────────────
     if (form.email && isEmailDuplicate(form.email, editing)) {
       showError(
         "Email Already Exists",
@@ -1074,7 +1071,6 @@ export default function EmployeeTable() {
       return;
     }
 
-    // ── Check duplicate phone (exclude self) ──────────────────────────────
     if (form.number && isPhoneDuplicate(form.number, editing)) {
       showError(
         "Phone Number Already in Use",

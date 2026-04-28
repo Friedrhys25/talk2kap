@@ -390,13 +390,12 @@ const Usertable = () => {
           });
         });
 
+        // ── UPDATED: Sort alphabetically by firstName, then lastName as tiebreaker ──
         arr.sort((a, b) => {
-          const da = toDate(a.createdAt);
-          const db = toDate(b.createdAt);
-          if (da && db) return db - da;
-          if (da) return -1;
-          if (db) return 1;
-          return (a.fullName || "").localeCompare(b.fullName || "");
+          const firstNameA = (a.firstName || "").toLowerCase();
+          const firstNameB = (b.firstName || "").toLowerCase();
+          if (firstNameA !== firstNameB) return firstNameA.localeCompare(firstNameB);
+          return (a.lastName || "").toLowerCase().localeCompare((b.lastName || "").toLowerCase());
         });
 
         setUsers(arr);
