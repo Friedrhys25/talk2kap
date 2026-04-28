@@ -1264,12 +1264,7 @@ const Validations = () => {
                       ✕ Decline
                     </button>
                   </div>
-                  <button
-                    onClick={() => deleteUser(selectedUser.id)}
-                    className="w-full py-3 rounded-xl bg-rose-50 text-rose-700 font-extrabold border border-rose-200 hover:bg-rose-100 transition inline-flex items-center justify-center gap-2"
-                  >
-                    <FiTrash2 /> Delete User
-                  </button>
+                  
                 </div>
               </div>
             </div>
