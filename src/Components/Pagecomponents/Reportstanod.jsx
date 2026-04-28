@@ -886,7 +886,7 @@ const Reportstanod = () => {
       <div className="min-h-screen bg-linear-to-br from-slate-50 via-indigo-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-14 w-14 border-b-2 border-indigo-600 mx-auto mb-4" />
-          <p className="text-gray-700 font-semibold text-sm">Loading tanod analytics...</p>
+          <p className="text-gray-700 font-semibold text-sm">Loading Employee analytics...</p>
           <p className="text-gray-500 text-xs mt-1">Fetching deployment history from Firestore</p>
         </div>
       </div>
@@ -919,7 +919,7 @@ const Reportstanod = () => {
 
           <div className="relative p-6 md:p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-5">
             <div>
-              <h1 className="text-xl md:text-2xl font-extrabold text-gray-900">Tanod Deployment Analytics</h1>
+              <h1 className="text-xl md:text-2xl font-extrabold text-gray-900">Employee Deployment Analytics</h1>
               <p className="text-sm text-gray-600 font-semibold mt-1">
                 Deployment trends, resolution rates, and performance metrics (Firestore Live)
               </p>

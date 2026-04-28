@@ -15,11 +15,11 @@ const Reportstanodpage = () => {
           </div>
 
           <h1 className="text-6xl font-extrabold bg-linear-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-            Tanod Deployment Reports
+            Employee Deployment Reports
           </h1>
 
           <p className="text-gray-600 text-lg font-medium">
-            Track deployment history, resolution rates, and tanod performance metrics
+            Track deployment history, resolution rates, and employee performance metrics
           </p>
 
           <div className="flex items-center justify-center gap-2 pt-2">

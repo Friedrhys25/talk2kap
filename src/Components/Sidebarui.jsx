@@ -278,7 +278,7 @@ const Sidebar = ({ selected, setSelected, pendingComplaintsCount, pendingValidat
     { title: "Validations",          Icon: FiUser,        notifs: pendingValidationsCount > 0 ? pendingValidationsCount : null },
     { title: "User List",            Icon: FiList },
     { title: "Reports",              Icon: FiBarChart },
-    { title: "Tanod Reports",        Icon: FiShield },
+    { title: "Employee Reports",     Icon: FiShield },
     { title: "Barangay Officials",   Icon: FiUsers },
     { title: "Barangay Employees",   Icon: FiUsers },
     { title: "Emergency Hotlines",   Icon: FiPhone },
@@ -463,7 +463,7 @@ const ExampleContent = ({ selected }) => (
         {selected === "Validations"        && <PageWrap key="validation"    ><Uservalid         /></PageWrap>}
         {selected === "User List"          && <PageWrap key="userlist"      ><Userpage          /></PageWrap>}
         {selected === "Reports"            && <PageWrap key="reports"       ><Reportspage       /></PageWrap>}
-        {selected === "Tanod Reports"      && <PageWrap key="tanodreports"  ><Reportstanodpage  /></PageWrap>}
+        {selected === "Employee Reports"   && <PageWrap key="tanodreports"  ><Reportstanodpage  /></PageWrap>}
         {selected === "Barangay Officials" && <PageWrap key="officials"     ><Officialpage      /></PageWrap>}
         {selected === "Barangay Employees" && <PageWrap key="employees"     ><Employeepage      /></PageWrap>}
         {selected === "Emergency Hotlines" && <PageWrap key="emergency"     ><Emergencypage     /></PageWrap>}
